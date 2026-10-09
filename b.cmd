@@ -5,6 +5,7 @@ rem  Barcha xabarlar o'zbekcha (lotin).
 rem ============================================================================
 
 setlocal EnableDelayedExpansion
+set "SELF=%~f0"
 title WinPE Backup
 color 0B
 mode con cols=100 lines=40 2>nul
@@ -314,15 +315,15 @@ set "BACKUP=!DST!\Backup_%UNAME%%STAMP%"
 mkdir "%BACKUP%" 2>nul
 mkdir "%BACKUP%\_SystemInfo" 2>nul
 set "LOG=%BACKUP%\_backup.log"
-set "SUMMARY=%BACKUP%\_summary.txt"
+rem Natijalar avval vaqtinchalik faylga yoziladi, oxirida _summary.txt UTF-8 da yig'iladi
+set "SUMMARY=%BACKUP%\_wb_sum.tmp"
+set "SUMFINAL=%BACKUP%\_summary.txt"
 set "REPORT=%BACKUP%\report.html"
-
-> "%SUMMARY%" echo WinPE Backup Summary
->> "%SUMMARY%" echo ====================
->> "%SUMMARY%" echo Manba:     !SRC!
->> "%SUMMARY%" echo Zaxira:    %BACKUP%
->> "%SUMMARY%" echo Boshlandi: %DATE% %TIME%
->> "%SUMMARY%" echo.
+set "T_BEGIN=%DATE% %TIME:~0,8%"
+type nul > "%SUMMARY%"
+rem Jurnalni Unicode (UTF-16) qilib yaratamiz: /UNILOG+ yangi faylga oddiy kodlashda yozadi,
+rem mavjud Unicode faylga esa Unicode da qo'shadi
+robocopy "%BACKUP%" NULL _wb_nofile_ /L /NJH /NJS /UNILOG:"%LOG%" >nul 2>&1
 
 rem robocopy fonda ishlaydi va faqat jurnalga yozadi; ekranda har ~2 soniyada jadval yangilanadi
 set "WORKER=%BACKUP%\_wb_worker.cmd"
@@ -336,11 +337,24 @@ call :now_sec START_S
 
 for /L %%I in (1,1,%NSEC%) do call :run_sec %%I
 
+call :now_sec END_S
+set /A COPY_EL=END_S-START_S
+if !COPY_EL! LSS 0 set /A COPY_EL+=86400
+call :fmt_hms !COPY_EL! COPY_HMS
+set "AVG_SPD=-"
+if !COPY_EL! GTR 0 (
+    set /A SP10=DONE_MB*10/COPY_EL
+    set /A SPI=SP10/10, SPF=SP10%%10
+    set "AVG_SPD=!SPI!.!SPF! MB/s"
+)
+
 set CUR_MB=0
 set "CNAME=Qo'shimcha ma'lumotlar"
 call :draw
 echo.
-echo    [*] Xatcho'plar, Outlook, SSH, RDP, shriftlar, tizim ma'lumotlari...
+echo    [*] Xatcho'plar, Outlook, SSH, RDP, shriftlar...
+set SUM_LINES=0
+for /f %%n in ('find /c /v "" ^< "%SUMMARY%"') do set SUM_LINES=%%n
 call :bookmark "!SRC!\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" "Chrome_Bookmarks"
 call :bookmark "!SRC!\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" "Edge_Bookmarks"
 call :bookmark "!SRC!\AppData\Roaming\Mozilla\Firefox\Profiles" "Firefox_Profiles"
@@ -351,23 +365,29 @@ call :ssh_keys
 call :user_fonts
 call :sticky_notes
 call :hosts_file
+
+rem Hisobot va matn fayllari UTF-8 da yoziladi: aks holda Bloknot kirill harflarini buzadi.
+rem Nusxalash tugagandan keyin almashtiriladi, shunda nusxalash qismiga ta'sir qilmaydi.
+set "OLDCP="
+for /f "tokens=2 delims=:." %%c in ('chcp') do set /A OLDCP=%%c
+chcp 65001 >nul 2>&1
+echo    [*] Tizim ma'lumotlari va HTML hisobot - 1-5 daqiqa...
 call :collect_sysinfo
 call :make_html_report
-del "%WORKER%" "%RCFILE%" 2>nul
-
->> "%SUMMARY%" echo.
->> "%SUMMARY%" echo Tugadi: %DATE% %TIME%
+call :write_summary
+del "%WORKER%" "%RCFILE%" "%SUMMARY%" 2>nul
 
 set "CNAME=TAYYOR"
 call :draw
 title TAYYOR - WinPE Backup
 echo.
 echo    Papka:    %BACKUP%
-echo    Hisobot:  %REPORT%
+echo    Hisobot:  %REPORT%   - brauzerda oching
 echo    Natija:   _summary.txt
 echo  ============================================================================
 echo.
 pause
+if defined OLDCP chcp !OLDCP! >nul 2>&1
 exit /b 0
 
 rem ===========================================================================
@@ -443,6 +463,8 @@ if "%~2"=="" set "S_SRC_!NSEC!=!SRC!"
 set "S_DST_!NSEC!=%~3"
 set "S_X_!NSEC!=!%~4!"
 set "S_MB_!NSEC!=0"
+set "S_CP_!NSEC!=0"
+set "S_T_!NSEC!=0"
 set "S_ST_!NSEC!=kutilmoqda"
 exit /b 0
 
@@ -521,12 +543,13 @@ if defined DISK_FULL (
 )
 set "S_ST_!CUR!=nusxalanmoqda..."
 set CUR_MB=0
+call :now_sec SEC_T0
 call :free_mb
 set "SEC_FREE0=!FREE_NOW_MB!"
 
 del "%RCFILE%" 2>nul
 > "%WORKER%" echo @echo off
->> "%WORKER%" echo robocopy "!CSRC!" "!CDST!" /E /R:0 /W:0 /MT:16 /XJ /NFL /NDL /NJH /NJS /NP /LOG+:"%LOG%" !CX! ^>nul 2^>^&1
+>> "%WORKER%" echo robocopy "!CSRC!" "!CDST!" /E /R:0 /W:0 /MT:16 /XJ /NDL /NP /UNILOG+:"%LOG%" !CX! ^>nul 2^>^&1
 >> "%WORKER%" echo ^> "%RCFILE%" echo %%ERRORLEVEL%%
 start "" /b cmd /c call "%WORKER%"
 
@@ -550,6 +573,11 @@ set "RCX="
 set "RC_MB=0"
 if exist "!CDST!\" call :rc_mb "!CDST!"
 set /A DONE_MB+=RC_MB
+set "S_CP_!CUR!=!RC_MB!"
+call :now_sec SEC_T1
+set /A SEC_DT=SEC_T1-SEC_T0
+if !SEC_DT! LSS 0 set /A SEC_DT+=86400
+set "S_T_!CUR!=!SEC_DT!"
 set CUR_MB=0
 if !RRC! GEQ 8 (
     set "S_ST_!CUR!=xato, kod !RRC!"
@@ -645,7 +673,7 @@ echo.
 echo    - %BNAME%
 mkdir "%BACKUP%\_Bookmarks" 2>nul
 if exist "%BPATH%\*" (
-    robocopy "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" /E /R:1 /W:1 /XJ /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
+    robocopy "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" /E /R:1 /W:1 /XJ /NFL /NDL /NP /NJH /NJS /UNILOG+:"%LOG%"
 ) else (
     copy /Y "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" >nul 2>&1
 )
@@ -659,7 +687,7 @@ mkdir "%BACKUP%\_Outlook" 2>nul
 set FOUND=0
 for %%P in ("!SRC!\Documents\Outlook Files" "!SRC!\AppData\Local\Microsoft\Outlook" "!SRC!\AppData\Roaming\Microsoft\Outlook") do (
     if exist %%P (
-        robocopy %%P "%BACKUP%\_Outlook" *.pst *.ost *.nst /S /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
+        robocopy %%P "%BACKUP%\_Outlook" *.pst *.ost *.nst /S /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /UNILOG+:"%LOG%"
         set FOUND=1
     )
 )
@@ -679,7 +707,7 @@ exit /b 0
 echo.
 echo    - SSH
 if exist "!SRC!\.ssh" (
-    robocopy "!SRC!\.ssh" "%BACKUP%\_SSH" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
+    robocopy "!SRC!\.ssh" "%BACKUP%\_SSH" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /UNILOG+:"%LOG%"
     >> "%SUMMARY%" echo [ok]   .ssh
 ) else (
     >> "%SUMMARY%" echo [skip] .ssh
@@ -700,7 +728,7 @@ exit /b 0
 echo.
 echo    - Shriftlar
 if exist "!SRC!\AppData\Local\Microsoft\Windows\Fonts" (
-    robocopy "!SRC!\AppData\Local\Microsoft\Windows\Fonts" "%BACKUP%\_UserFonts" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
+    robocopy "!SRC!\AppData\Local\Microsoft\Windows\Fonts" "%BACKUP%\_UserFonts" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /UNILOG+:"%LOG%"
     >> "%SUMMARY%" echo [ok]   shriftlar
 ) else (
     >> "%SUMMARY%" echo [skip] shriftlar
@@ -730,36 +758,32 @@ if defined SYS_DRIVE (
 exit /b 0
 
 :collect_sysinfo
-echo.
-echo    - O'rnatilgan dasturlar, Wi-Fi, Windows kaliti
 set "SI=%BACKUP%\_SystemInfo"
 
+rem --- O'rnatilgan dasturlar: WinPE da - Windows diskidagi reestrdan, oddiy Windows da - joriy reestrdan
 set "APPS_TXT=%SI%\installed_programs.txt"
+set "APPS_LI=%BACKUP%\_wb_apps.tmp"
 > "%APPS_TXT%" echo O'rnatilgan dasturlar
->> "%APPS_TXT%" echo ====================
-echo. >> "%APPS_TXT%"
-
-if defined SYS_DRIVE (
-    set "HIVE=!SYS_DRIVE!\Windows\System32\config\SOFTWARE"
-    if exist "!HIVE!" (
-        reg load HKLM\OFFLINE_SW "!HIVE!" >nul 2>&1
-        if not errorlevel 1 (
-            for /f "tokens=*" %%K in ('reg query "HKLM\OFFLINE_SW\Microsoft\Windows\CurrentVersion\Uninstall" 2^>nul') do (
-                for /f "tokens=2,*" %%A in ('reg query "%%K" /v DisplayName 2^>nul ^| find "REG_SZ"') do (
-                    >> "%APPS_TXT%" echo %%B
-                )
-            )
-            for /f "tokens=*" %%K in ('reg query "HKLM\OFFLINE_SW\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" 2^>nul') do (
-                for /f "tokens=2,*" %%A in ('reg query "%%K" /v DisplayName 2^>nul ^| find "REG_SZ"') do (
-                    >> "%APPS_TXT%" echo %%B
-                )
-            )
-            reg unload HKLM\OFFLINE_SW >nul 2>&1
-        )
+>> "%APPS_TXT%" echo =====================
+type nul > "%APPS_LI%"
+set APPS_N=0
+set "APPS_DONE="
+if defined SYS_DRIVE if exist "!SYS_DRIVE!\Windows\System32\config\SOFTWARE" (
+    reg load HKLM\OFFLINE_SW "!SYS_DRIVE!\Windows\System32\config\SOFTWARE" >nul 2>&1
+    if not errorlevel 1 (
+        call :apps_from "HKLM\OFFLINE_SW\Microsoft\Windows\CurrentVersion\Uninstall"
+        call :apps_from "HKLM\OFFLINE_SW\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        reg unload HKLM\OFFLINE_SW >nul 2>&1
+        set "APPS_DONE=1"
     )
+)
+if not defined APPS_DONE (
+    call :apps_from "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    call :apps_from "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
 )
 >> "%SUMMARY%" echo [ok]   dasturlar
 
+rem --- Wi-Fi profillari va tarmoq nomlari
 set "WIFI_DIR=%SI%\WiFi"
 mkdir "%WIFI_DIR%" 2>nul
 netsh wlan show profiles >nul 2>&1
@@ -771,103 +795,378 @@ if not errorlevel 1 (
         if exist "!WLAN_SRC!" robocopy "!WLAN_SRC!" "%WIFI_DIR%\RawProfiles" /E /R:1 /W:1 /NFL /NDL /NP >nul
     )
 )
+set "WIFI_LIST="
+for /r "%WIFI_DIR%" %%F in (*.xml) do call :wifi_name "%%F"
 >> "%SUMMARY%" echo [ok]   Wi-Fi
 
+rem --- Windows OEM kaliti
+set "WKEY="
+for /f "usebackq tokens=2 delims==" %%K in (`wmic path softwarelicensingservice get OA3xOriginalProductKey /value 2^>nul ^| find "="`) do for /f "tokens=*" %%x in ("%%K") do set "WKEY=%%x"
 set "KEY_TXT=%SI%\windows_product_key.txt"
-> "%KEY_TXT%" echo Windows Product Key
-echo. >> "%KEY_TXT%"
-for /f "usebackq tokens=2 delims==" %%K in (`wmic path softwarelicensingservice get OA3xOriginalProductKey /value 2^>nul ^| find "="`) do (
-    >> "%KEY_TXT%" echo OEM Key: %%K
+> "%KEY_TXT%" echo Windows OEM kaliti
+if defined WKEY (
+    >> "%KEY_TXT%" echo !WKEY!
+    set "WKEY_M=*****-*****-*****-*****-!WKEY:~-5!"
+    >> "%SUMMARY%" echo [ok]   Windows kaliti
+) else (
+    >> "%KEY_TXT%" echo topilmadi - WinPE da kalitni o'qib bo'lmaydi
+    set "WKEY_M=topilmadi"
+    >> "%SUMMARY%" echo [skip] Windows kaliti
 )
->> "%SUMMARY%" echo [ok]   Windows kaliti
 
+rem --- Kompyuter haqida (wmic qiymatlari qatorma-qator olinadi: UTF-16 aralashmaydi)
+call :wmi1 "computersystem" "Manufacturer" HW_MAN
+call :wmi1 "computersystem" "Model" HW_MODEL
+call :wmi1 "bios" "SerialNumber" HW_SERIAL
+call :wmi1 "cpu" "Name" HW_CPU
+call :wmi1 "cpu" "NumberOfCores" HW_CORES
+call :wmi1 "cpu" "NumberOfLogicalProcessors" HW_THREADS
+call :wmi1 "computersystem" "TotalPhysicalMemory" HW_RAMB
+call :wmi_list "path win32_videocontroller" "Name" HW_GPU
+call :disks
+call :wmi1 "bios" "Manufacturer" HW_BIOSM
+call :wmi1 "bios" "SMBIOSBIOSVersion" HW_BIOSV
+call :wmi1 "bios" "ReleaseDate" HW_BIOSD
+set "HW_RAM="
+if defined HW_RAMB (
+    set "NUMTMP=!HW_RAMB:~0,-6!"
+    if "!NUMTMP!"=="" set "NUMTMP=0"
+    rem baytlar/10^6 dan GiB ga: 1 GiB = 1073.74 * 10^6 bayt
+    set /A "HW_RAMGB=(NUMTMP+537)/1074"
+    set "HW_RAM=!HW_RAMGB! GB"
+)
+set "HW_BIOS=!HW_BIOSM! !HW_BIOSV!"
+if defined HW_BIOSD set "HW_BIOS=!HW_BIOS!, !HW_BIOSD:~0,4!-!HW_BIOSD:~4,2!-!HW_BIOSD:~6,2!"
+set "HW_CT="
+if defined HW_CORES set "HW_CT=!HW_CORES! yadro / !HW_THREADS! oqim"
 
 set "HW=%SI%\hardware.txt"
-> "%HW%" echo Hardware
-echo. >> "%HW%"
-echo --- CPU --- >> "%HW%"
-wmic cpu get Name,NumberOfCores,MaxClockSpeed /format:list 2>nul >> "%HW%"
-echo --- RAM --- >> "%HW%"
-wmic memorychip get Capacity,Speed,Manufacturer /format:list 2>nul >> "%HW%"
-echo --- GPU --- >> "%HW%"
-wmic path win32_videocontroller get Name,AdapterRAM /format:list 2>nul >> "%HW%"
-echo --- Disks --- >> "%HW%"
-wmic diskdrive get Model,Size /format:list 2>nul >> "%HW%"
-echo --- BIOS --- >> "%HW%"
-wmic bios get Manufacturer,SMBIOSBIOSVersion,ReleaseDate /format:list 2>nul >> "%HW%"
->> "%SUMMARY%" echo [ok]   hardware
+> "%HW%" echo Kompyuter haqida
+>> "%HW%" echo ================
+>> "%HW%" echo Ishlab chiqaruvchi: !HW_MAN!
+>> "%HW%" echo Model:              !HW_MODEL!
+>> "%HW%" echo Seriya raqami:      !HW_SERIAL!
+>> "%HW%" echo Protsessor:         !HW_CPU!
+>> "%HW%" echo Yadrolar:           !HW_CT!
+>> "%HW%" echo Operativ xotira:    !HW_RAM!
+>> "%HW%" echo Videokarta:         !HW_GPU!
+>> "%HW%" echo Disklar:            !HW_DISKS!
+>> "%HW%" echo BIOS:               !HW_BIOS!
+>> "%SUMMARY%" echo [ok]   kompyuter ma'lumotlari
+exit /b 0
+
+:apps_from
+for /f "tokens=*" %%K in ('reg query "%~1" 2^>nul') do (
+    for /f "tokens=2,*" %%A in ('reg query "%%K" /v DisplayName 2^>nul ^| find "REG_SZ"') do (
+        set "AN=%%B"
+        >> "%APPS_TXT%" echo(!AN!
+        call :esc AN
+        >> "%APPS_LI%" echo ^<li^>!AN!^</li^>
+        set /A APPS_N+=1
+    )
+)
+exit /b 0
+
+:wifi_name
+set "SS="
+for /f "usebackq delims=" %%L in (`type "%~1" 2^>nul ^| find "<name>"`) do if not defined SS set "SS=%%L"
+if not defined SS exit /b 0
+set "SS=!SS:<name>=!"
+set "SS=!SS:</name>=!"
+for /f "tokens=*" %%t in ("!SS!") do set "SS=%%t"
+if defined WIFI_LIST (set "WIFI_LIST=!WIFI_LIST!, !SS!") else set "WIFI_LIST=!SS!"
+exit /b 0
+
+:wmi1
+rem %1 wmic sinfi, %2 xususiyat, %3 natija o'zgaruvchisi - birinchi qiymat
+set "%~3="
+for /f "usebackq tokens=1* delims==" %%A in (`wmic %~1 get %~2 /value 2^>nul ^| find "="`) do (
+    if not defined %~3 for /f "tokens=*" %%x in ("%%B") do set "%~3=%%x"
+)
+exit /b 0
+
+:wmi_list
+rem Barcha qiymatlar vergul bilan
+set "%~3="
+for /f "usebackq tokens=1* delims==" %%A in (`wmic %~1 get %~2 /value 2^>nul ^| find "="`) do for /f "tokens=*" %%x in ("%%B") do (
+    if defined %~3 (set "%~3=!%~3!, %%x") else set "%~3=%%x"
+)
+exit /b 0
+
+:disks
+set "HW_DISKS="
+set "DM="
+for /f "usebackq tokens=1* delims==" %%A in (`wmic diskdrive get Model^,Size /value 2^>nul ^| find "="`) do for /f "tokens=*" %%x in ("%%B") do (
+    if /I "%%A"=="Model" set "DM=%%x"
+    if /I "%%A"=="Size" (
+        set "DSZ=%%x"
+        set "DSZ=!DSZ:~0,-9!"
+        if "!DSZ!"=="" set "DSZ=0"
+        if defined HW_DISKS (set "HW_DISKS=!HW_DISKS!; !DM! - !DSZ! GB") else set "HW_DISKS=!DM! - !DSZ! GB"
+    )
+)
+exit /b 0
+
+:esc
+rem O'zgaruvchidagi & < > belgilarini HTML uchun xavfsiz qiladi
+if not defined %~1 exit /b 0
+set "EV=!%~1!"
+set "EV=!EV:&=&amp;!"
+set "EV=!EV:<=&lt;!"
+set "EV=!EV:>=&gt;!"
+set "%~1=!EV!"
+exit /b 0
+
+:rc_stats
+rem Zaxiradagi CATF maskali fayllar: soni RS_FILES va hajmi RS_MB
+set "RS_FILES=0"
+set "RS_B="
+set RC_ROW=0
+for /f "tokens=1* delims=:" %%A in ('robocopy "%~1" NULL !CATF! /L /S /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 /XD "%~1\_SystemInfo" 2^>nul ^| find " : "') do (
+    set /A RC_ROW+=1
+    if !RC_ROW!==2 for /f "tokens=2" %%N in ("%%B") do set "RS_FILES=%%N"
+    if !RC_ROW!==3 for /f "tokens=2" %%N in ("%%B") do set "RS_B=%%N"
+)
+set "RS_MB=0"
+if defined RS_B set "RS_MB=!RS_B:~0,-6!"
+if "!RS_MB!"=="" set "RS_MB=0"
+exit /b 0
+
+:cat
+set /A NCAT+=1
+set "C_NAME_!NCAT!=%~1"
+set "CATF=%~2"
+call :rc_stats "%BACKUP%"
+set "C_N_!NCAT!=!RS_FILES!"
+set "C_MB_!NCAT!=!RS_MB!"
 exit /b 0
 
 :make_html_report
-echo.
-echo    - HTML hisobot
-set "TMP_STATS=%BACKUP%\_stats.tmp"
-> "%TMP_STATS%" echo.
+set NCAT=0
+call :cat "Hujjatlar" "*.pdf *.doc *.docx *.odt *.rtf *.txt *.md *.xls *.xlsx *.ods *.csv *.ppt *.pptx *.odp"
+call :cat "Rasmlar"   "*.jpg *.jpeg *.png *.gif *.bmp *.tif *.tiff *.webp *.svg *.heic *.raw *.cr2 *.nef *.arw"
+call :cat "Videolar"  "*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.3gp"
+call :cat "Audio"     "*.mp3 *.wav *.flac *.aac *.ogg *.m4a *.wma *.opus"
+call :cat "Arxivlar"  "*.zip *.rar *.7z *.tar *.gz *.bz2 *.xz"
+call :cat "Kod"       "*.py *.ipynb *.js *.ts *.java *.c *.cpp *.h *.hpp *.cs *.go *.rs *.rb *.php *.html *.css *.sql *.sh *.ps1"
 
-call :count_cat "Documents" "pdf doc docx odt rtf txt md xls xlsx ods csv ppt pptx odp"
-call :count_cat "Images" "jpg jpeg png gif bmp tiff tif webp svg heic"
-call :count_cat "Videos" "mp4 mkv avi mov wmv flv webm m4v mpg mpeg 3gp"
-call :count_cat "Audio" "mp3 wav flac aac ogg m4a wma opus"
-call :count_cat "Archives" "zip rar 7z tar gz bz2 xz iso"
-call :count_cat "Code" "py js ts java c cpp h hpp cs go rs rb php html css sql sh ps1 ipynb"
-call :count_cat "Executables" "exe msi msix appx bat cmd ps1 app"
-
-> "%REPORT%" echo ^<!DOCTYPE html^>
->> "%REPORT%" echo ^<html lang="uz"^>^<head^>^<meta charset="UTF-8"^>
->> "%REPORT%" echo ^<title^>Backup Report - %UNAME%^</title^>
->> "%REPORT%" echo ^<style^>
->> "%REPORT%" echo body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:2rem;line-height:1.6}
->> "%REPORT%" echo .container{max-width:1100px;margin:0 auto}
->> "%REPORT%" echo h1{color:#60a5fa;border-bottom:2px solid #334155;padding-bottom:.5rem}
->> "%REPORT%" echo h2{color:#93c5fd;margin-top:2rem}
->> "%REPORT%" echo .meta{background:#1e293b;padding:1rem 1.5rem;border-radius:8px;margin-bottom:1.5rem;border-left:4px solid #60a5fa}
->> "%REPORT%" echo .meta b{color:#fbbf24}
->> "%REPORT%" echo .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1.5rem 0}
->> "%REPORT%" echo .card{background:#1e293b;padding:1.25rem;border-radius:8px;border-left:4px solid #10b981}
->> "%REPORT%" echo .card .name{color:#93c5fd;font-weight:600;margin-bottom:.5rem}
->> "%REPORT%" echo .card .count{font-size:2rem;font-weight:700;color:#fff}
->> "%REPORT%" echo .bar{background:#334155;height:8px;border-radius:4px;overflow:hidden;margin-top:.75rem}
->> "%REPORT%" echo .bar div{background:linear-gradient(90deg,#60a5fa,#a78bfa);height:100%%}
->> "%REPORT%" echo table{width:100%%;border-collapse:collapse;margin:1rem 0}
->> "%REPORT%" echo th,td{text-align:left;padding:.6rem;border-bottom:1px solid #334155}
->> "%REPORT%" echo th{background:#1e293b;color:#93c5fd}
->> "%REPORT%" echo ^</style^>^</head^>^<body^>^<div class="container"^>
->> "%REPORT%" echo ^<h1^>Backup Report^</h1^>
->> "%REPORT%" echo ^<div class="meta"^>
->> "%REPORT%" echo ^<b^>Foydalanuvchi:^</b^> %UNAME%^<br^>
->> "%REPORT%" echo ^<b^>Manba:^</b^> !SRC!^<br^>
->> "%REPORT%" echo ^<b^>Zaxira:^</b^> %BACKUP%^<br^>
->> "%REPORT%" echo ^<b^>Sana:^</b^> %DATE% %TIME%^<br^>
->> "%REPORT%" echo ^</div^>
->> "%REPORT%" echo ^<h2^>Fayllar toifalari^</h2^>
->> "%REPORT%" echo ^<div class="grid"^>
-
-set MAXCOUNT=0
-for /f "tokens=1,2 delims=|" %%A in (%TMP_STATS%) do if %%B GTR !MAXCOUNT! set MAXCOUNT=%%B
-if !MAXCOUNT!==0 set MAXCOUNT=1
-
-for /f "tokens=1,2 delims=|" %%A in (%TMP_STATS%) do (
-    set /A PCT=%%B*100/!MAXCOUNT!
-    >> "%REPORT%" echo ^<div class="card"^>^<div class="name"^>%%A^</div^>^<div class="count"^>%%B^</div^>^<div class="bar"^>^<div style="width:!PCT!%%"^>^</div^>^</div^>^</div^>
+set N_OK=0
+set N_ALL=0
+for /L %%I in (1,1,%NSEC%) do (
+    if not "!S_ST_%%I!"=="yo'q" set /A N_ALL+=1
+    if "!S_ST_%%I!"=="tayyor" set /A N_OK+=1
 )
+set /A GBI=DONE_MB/1000, GBF=(DONE_MB%%1000)/100
+set "DONE_STR=!GBI!.!GBF! GB"
+if !DONE_MB! LSS 1000 set "DONE_STR=!DONE_MB! MB"
+
+set "HU=!UNAME!"
+call :esc HU
+set "HSRC=!SRC!"
+call :esc HSRC
+set "HBK=%BACKUP%"
+call :esc HBK
+for %%v in (HW_MAN HW_MODEL HW_SERIAL HW_CPU HW_GPU HW_DISKS HW_BIOS WIFI_LIST) do call :esc %%v
+
+type nul > "%REPORT%"
+call :emit HEAD
+>> "%REPORT%" echo ^<h1^>Zaxira hisoboti^</h1^>
+>> "%REPORT%" echo ^<p class='sub'^>!HU! - !HW_MAN! !HW_MODEL! - !T_BEGIN!^</p^>
+
+>> "%REPORT%" echo ^<div class='kpis'^>
+>> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>Nusxalandi^</div^>^<div class='v'^>!DONE_STR!^</div^>^</div^>
+>> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>Sarflangan vaqt^</div^>^<div class='v'^>!COPY_HMS!^</div^>^</div^>
+>> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>O'rtacha tezlik^</div^>^<div class='v'^>!AVG_SPD!^</div^>^</div^>
+>> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>Tayyor papkalar^</div^>^<div class='v'^>!N_OK! / !N_ALL!^</div^>^</div^>
 >> "%REPORT%" echo ^</div^>
 
->> "%REPORT%" echo ^<h2^>Zaxira tarkibi^</h2^>
->> "%REPORT%" echo ^<table^>^<tr^>^<th^>Papka^</th^>^</tr^>
-for /D %%D in ("%BACKUP%\*") do >> "%REPORT%" echo ^<tr^>^<td^>%%~nxD^</td^>^</tr^>
->> "%REPORT%" echo ^</table^>
->> "%REPORT%" echo ^</div^>^</body^>^</html^>
+>> "%REPORT%" echo ^<h2^>Papkalar^</h2^>
+>> "%REPORT%" echo ^<div class='card'^>^<table^>^<tr^>^<th^>#^</th^>^<th^>Papka^</th^>^<th class='n'^>Reja, MB^</th^>^<th class='n'^>Nusxalandi, MB^</th^>^<th class='n'^>Vaqt^</th^>^<th^>Holat^</th^>^</tr^>
+for /L %%I in (1,1,%NSEC%) do call :html_row %%I
+>> "%REPORT%" echo ^</table^>^</div^>
 
-del "%TMP_STATS%" 2>nul
->> "%SUMMARY%" echo [ok]   HTML
+>> "%REPORT%" echo ^<h2^>Fayl turlari^</h2^>
+>> "%REPORT%" echo ^<div class='grid'^>
+for /L %%I in (1,1,!NCAT!) do call :html_cat %%I
+>> "%REPORT%" echo ^</div^>
+
+>> "%REPORT%" echo ^<h2^>Qo'shimcha ma'lumotlar^</h2^>
+>> "%REPORT%" echo ^<div class='card'^>^<table^>
+set "SKIPOPT="
+if !SUM_LINES! GTR 0 set "SKIPOPT=skip=!SUM_LINES!"
+for /f "usebackq %SKIPOPT% tokens=1*" %%A in ("%SUMMARY%") do call :html_extra "%%A" "%%B"
+>> "%REPORT%" echo ^</table^>^</div^>
+
+>> "%REPORT%" echo ^<h2^>Kompyuter^</h2^>
+>> "%REPORT%" echo ^<div class='card'^>^<div class='kv'^>
+call :kv "Ishlab chiqaruvchi" HW_MAN
+call :kv "Model" HW_MODEL
+call :kv "Seriya raqami" HW_SERIAL
+call :kv "Protsessor" HW_CPU
+call :kv "Yadrolar" HW_CT
+call :kv "Operativ xotira" HW_RAM
+call :kv "Videokarta" HW_GPU
+call :kv "Disklar" HW_DISKS
+call :kv "BIOS" HW_BIOS
+call :kv "Windows kaliti" WKEY_M
+call :kv "Wi-Fi tarmoqlari" WIFI_LIST
+>> "%REPORT%" echo ^</div^>^</div^>
+
+>> "%REPORT%" echo ^<h2^>O'rnatilgan dasturlar - ^<span id='appcount'^>!APPS_N!^</span^>^</h2^>
+>> "%REPORT%" echo ^<input id='q' type='search' placeholder='Qidirish...' autocomplete='off'^>
+>> "%REPORT%" echo ^<div class='card'^>^<ul class='apps' id='apps'^>
+if !APPS_N! GTR 0 (type "%APPS_LI%" >> "%REPORT%") else (>> "%REPORT%" echo ^<li^>Ro'yxat topilmadi^</li^>)
+>> "%REPORT%" echo ^</ul^>^</div^>
+
+>> "%REPORT%" echo ^<div class='foot'^>Manba: ^<code^>!HSRC!^</code^>^<br^>Zaxira: ^<code^>!HBK!^</code^>^<br^>Batafsil jurnal: ^<code^>_backup.log^</code^> - tizim fayllari: ^<code^>_SystemInfo^</code^>^</div^>
+call :emit TAIL
+del "%APPS_LI%" 2>nul
 exit /b 0
 
-:count_cat
-set "CAT=%~1"
-set "EXTS=%~2"
-set CFILES=0
-for %%E in (%EXTS%) do (
-    for /f %%N in ('dir "%BACKUP%\*.%%E" /s /a-d /b 2^>nul ^| find /c /v ""') do set /A CFILES+=%%N
+:html_row
+for %%i in (%~1) do (
+    set "RN=!S_NAME_%%i!"
+    set "RP=!S_MB_%%i!"
+    set "RCP=!S_CP_%%i!"
+    set "RS=!S_ST_%%i!"
+    set "RT=!S_T_%%i!"
 )
->> "%TMP_STATS%" echo %CAT%^|!CFILES!
+set "CLS=skip"
+if "!RS!"=="tayyor" set "CLS=ok"
+if "!RS:~0,4!"=="xato" set "CLS=err"
+if "!RS!"=="joy yo'q" set "CLS=warn"
+call :fmt_hms !RT! RTH
+if "!CLS!"=="skip" (
+    set "RTH=-"
+    set "RCP=-"
+)
+>> "%REPORT%" echo ^<tr^>^<td^>%~1^</td^>^<td^>!RN!^</td^>^<td class='n'^>!RP!^</td^>^<td class='n'^>!RCP!^</td^>^<td class='n'^>!RTH!^</td^>^<td^>^<span class='b !CLS!'^>!RS!^</span^>^</td^>^</tr^>
 exit /b 0
+
+:html_cat
+for %%i in (%~1) do (
+    set "CN=!C_NAME_%%i!"
+    set "CC=!C_N_%%i!"
+    set "CM=!C_MB_%%i!"
+)
+set PW=0
+if !DONE_MB! GTR 0 set /A PW=CM*100/DONE_MB
+if !PW! GTR 100 set PW=100
+if !PW! EQU 0 if !CM! GTR 0 set PW=1
+>> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>!CN!^</div^>^<div class='v'^>!CC!^</div^>^<div class='l'^>fayl, !CM! MB^</div^>^<div class='bar'^>^<i style='width:!PW!%%'^>^</i^>^</div^>^</div^>
+exit /b 0
+
+:html_extra
+set "XS=%~1"
+set "XN=%~2"
+set "CLS=skip"
+set "XT=o'tkazildi"
+if "!XS!"=="[ok]" (
+    set "CLS=ok"
+    set "XT=tayyor"
+)
+if "!XS!"=="[xato]" (
+    set "CLS=err"
+    set "XT=xato"
+)
+call :esc XN
+>> "%REPORT%" echo ^<tr^>^<td^>!XN!^</td^>^<td^>^<span class='b !CLS!'^>!XT!^</span^>^</td^>^</tr^>
+exit /b 0
+
+:kv
+set "KV=!%~2!"
+if not defined KV set "KV=-"
+>> "%REPORT%" echo ^<div^>%~1^</div^>^<div^>!KV!^</div^>
+exit /b 0
+
+:emit
+rem Shu faylning oxiridagi ::BEGIN_x ... ::END_x orasidagi HTML qatorlarini hisobotga yozadi
+setlocal DisableDelayedExpansion
+set "EMIT="
+for /f "usebackq eol=` delims=" %%L in ("%SELF%") do (
+    if "%%L"=="::END_%~1" set "EMIT="
+    if defined EMIT >> "%REPORT%" echo(%%L
+    if "%%L"=="::BEGIN_%~1" set "EMIT=1"
+)
+endlocal
+exit /b 0
+
+:write_summary
+> "%SUMFINAL%" echo Zaxira natijasi
+>> "%SUMFINAL%" echo ===============
+>> "%SUMFINAL%" echo Foydalanuvchi: !UNAME!
+>> "%SUMFINAL%" echo Manba:         !SRC!
+>> "%SUMFINAL%" echo Zaxira:        %BACKUP%
+>> "%SUMFINAL%" echo Boshlandi:     !T_BEGIN!
+>> "%SUMFINAL%" echo Tugadi:        %DATE% %TIME:~0,8%
+>> "%SUMFINAL%" echo Nusxalandi:    !DONE_MB! MB, vaqt !COPY_HMS!, o'rtacha tezlik !AVG_SPD!
+>> "%SUMFINAL%" echo.
+type "%SUMMARY%" >> "%SUMFINAL%"
+exit /b 0
+
+rem ===========================================================================
+rem  HTML shabloni - bajarilmaydi, faqat :emit o'qiydi.
+rem  Ichida qo'sh tirnoq ishlatilmaydi (faqat bittalik), qatorlar ; bilan boshlanmaydi.
+rem ===========================================================================
+::BEGIN_HEAD
+<!DOCTYPE html>
+<html lang='uz'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Zaxira hisoboti</title>
+<style>
+html{--bg:#f6f7f9;--card:#ffffff;--text:#1f2328;--muted:#656d76;--line:#d8dee4;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--err:#cf222e;--skip:#6e7781}
+@media (prefers-color-scheme:dark){html{--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#8d96a0;--line:#30363d;--accent:#4493f8;--ok:#3fb950;--warn:#d29922;--err:#f85149;--skip:#8d96a0}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 16px 56px}
+h1{font-size:28px;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:18px;margin:36px 0 12px}
+.sub{color:var(--muted);margin:0 0 22px}
+.kpis,.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .l{color:var(--muted);font-size:13px}
+.kpi .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.3}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:13px;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+.n{text-align:right}
+.b{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid currentColor}
+.ok{color:var(--ok)}
+.skip{color:var(--skip)}
+.err{color:var(--err)}
+.warn{color:var(--warn)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.kv{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:8px 16px;padding:16px}
+.kv div:nth-child(odd){color:var(--muted)}
+.kv div:nth-child(even){word-break:break-word}
+input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;margin-bottom:10px}
+ul.apps{columns:2 300px;column-gap:28px;margin:0;padding:14px 16px 14px 34px}
+ul.apps li{break-inside:avoid;padding:2px 0}
+.foot{color:var(--muted);font-size:13px;margin-top:36px;word-break:break-all}
+code{font-family:Consolas,'Courier New',monospace;font-size:13px}
+@media print{body{background:#fff}.kpi,.card{break-inside:avoid}input{display:none}}
+</style>
+</head>
+<body><div class='wrap'>
+::END_HEAD
+::BEGIN_TAIL
+<script>
+(function(){
+var ul=document.getElementById('apps');if(ul===null){return}
+var seen={},items=[];
+Array.prototype.forEach.call(ul.querySelectorAll('li'),function(li){var t=li.textContent.trim(),k=t.toLowerCase();if(t.length>0&&seen[k]===undefined){seen[k]=1;items.push(t)}});
+items.sort(function(a,b){return a.localeCompare(b)});
+ul.innerHTML='';
+items.forEach(function(t){var li=document.createElement('li');li.textContent=t;ul.appendChild(li)});
+var c=document.getElementById('appcount');if(c){c.textContent=items.length}
+var q=document.getElementById('q');
+if(q){q.addEventListener('input',function(){var v=q.value.toLowerCase();Array.prototype.forEach.call(ul.children,function(li){li.style.display=li.textContent.toLowerCase().indexOf(v)<0?'none':''})})}
+})();
+</script>
+</div></body></html>
+::END_TAIL
