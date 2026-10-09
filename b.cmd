@@ -1,15 +1,8 @@
 @echo off
 rem ============================================================================
-rem  winpe-backup.cmd  -  comprehensive user-profile backup from WinPE / Windows
-rem
-rem  Usage:
-rem    1) Boot into WinPE, open cmd (Shift+F10).
-rem    2) Run from anywhere, e.g.:
-rem         E:\winpe-backup.cmd
-rem         X:\sources\winpe-backup.cmd
-rem    3) Script auto-detects destination (USB) and source profile.
-rem
-rem  All messages in English (WinPE often lacks cyrillic fonts).
+rem  winpe-backup.cmd  -  WinPE'dan foydalanuvchi profilini zaxiralash
+rem  Barcha xabarlar o'zbekcha (lotin) - WinPE'da kirill shriftlari ko'pincha
+rem  ishlamaydi, shuning uchun lotin yozuv tanlangan.
 rem ============================================================================
 
 setlocal EnableDelayedExpansion
@@ -18,21 +11,22 @@ color 07
 
 echo.
 echo ============================================================
-echo    WinPE Backup  -  comprehensive profile backup tool
+echo    WinPE Backup  -  foydalanuvchi ma'lumotlarini zaxiralash
 echo ============================================================
 echo.
 
 rem ============================================================
-rem  0) ADMIN CHECK
+rem  0) ADMIN TEKSHIRUV
 rem ============================================================
 net session >nul 2>&1
 if errorlevel 1 (
-    echo [i] Note: not running as admin. Some protected files may be skipped.
+    echo [i] Diqqat: administrator huquqisiz ishga tushirilgan.
+    echo     Ba'zi himoyalangan fayllar o'tkazib yuborilishi mumkin.
     echo.
 )
 
 rem ============================================================
-rem  1) DETECT DRIVES - three fallbacks
+rem  1) DISKLARNI ANIQLASH - 3 bosqichli fallback
 rem ============================================================
 set ALL_DRIVES=
 set DETECT_METHOD=none
@@ -64,16 +58,16 @@ for %%L in (A B C D E F G H I J K L M N O P Q R S T U V W Y Z) do (
 
 :drives_done
 if "%ALL_DRIVES%"=="" (
-    echo [!] No drives detected.
+    echo [!] Hech qanday disk topilmadi.
     pause
     exit /b 1
 )
-echo [i] Drive detection method: %DETECT_METHOD%
-echo [i] Drives found:          %ALL_DRIVES%
+echo [i] Disklarni aniqlash usuli: %DETECT_METHOD%
+echo [i] Topilgan disklar:         %ALL_DRIVES%
 echo.
 
 rem ============================================================
-rem  2) CLASSIFY DRIVES
+rem  2) DISKLARNI AJRATISH
 rem ============================================================
 set DESTS=
 set SOURCES=
@@ -86,10 +80,11 @@ for %%L in (%ALL_DRIVES%) do (
 )
 
 rem ============================================================
-rem  3) PICK DESTINATION
+rem  3) MANZIL (fleshka) TANLASH
 rem ============================================================
 if "%DESTS%"=="" (
-    echo [!] No destination drive found.
+    echo [!] Zaxira uchun disk topilmadi.
+    echo     Fleshkani ulang va qaytadan ishga tushiring.
     pause
     exit /b 1
 )
@@ -99,41 +94,45 @@ for %%P in (%DESTS%) do set /A DCOUNT+=1
 
 if %DCOUNT%==1 (
     for %%P in (%DESTS%) do set "DST=%%~P"
-    echo [=] Destination: !DST!\
+    echo [=] Zaxira joyi: !DST!\
 ) else (
-    echo Multiple possible destinations found:
+    echo Bir nechta disk topildi:
     set I=0
     for %%P in (%DESTS%) do (
         set /A I+=1
         set "VN="
-        set "FS="
+        set "FS=0"
         for /f "usebackq tokens=2 delims==" %%V in (`wmic logicaldisk where "DeviceID='%%~P'" get VolumeName /value 2^>nul ^| find "="`) do set "VN=%%V"
         for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='%%~P'" get FreeSpace /value 2^>nul ^| find "="`) do set "FS=%%S"
+        set "FS_GB=?"
         if defined FS (
-            set /A FSG=!FS!/1073741824
-            echo    [!I!] %%~P   label:"!VN!"   free:!FSG! GB
-        ) else (
-            echo    [!I!] %%~P   label:"!VN!"
+            if not "!FS!"=="" (
+                rem 32-bit mahdudiyatidan qochish uchun oxirgi 9 raqamni olib tashlab GB ga aylantiramiz
+                set "FS_SHORT=!FS:~0,-9!"
+                if "!FS_SHORT!"=="" set "FS_SHORT=0"
+                set "FS_GB=!FS_SHORT!"
+            )
         )
+        echo    [!I!] %%~P   nom:"!VN!"   bo'sh: !FS_GB! GB
     )
     echo.
-    set /P DPICK=Pick destination number:
+    set /P DPICK=Disk raqamini tanlang:
     set I=0
     for %%P in (%DESTS%) do (
         set /A I+=1
         if "!I!"=="!DPICK!" set "DST=%%~P"
     )
     if "!DST!"=="" (
-        echo [!] Invalid choice.
+        echo [!] Noto'g'ri tanlov.
         pause
         exit /b 1
     )
-    echo [=] Destination: !DST!\
+    echo [=] Zaxira joyi: !DST!\
 )
 echo.
 
 rem ============================================================
-rem  4) PICK SOURCE PROFILE
+rem  4) FOYDALANUVCHI PROFILINI TANLASH
 rem ============================================================
 set CANDIDATES=
 set SYS_DRIVE=
@@ -151,7 +150,8 @@ for %%D in (%SOURCES%) do (
 )
 
 if "%CANDIDATES%"=="" (
-    echo [!] No user profile found.
+    echo [!] Foydalanuvchi profili topilmadi.
+    echo     Qo'lda tekshiring:  dir C:\Users
     pause
     exit /b 1
 )
@@ -161,87 +161,78 @@ for %%P in (%CANDIDATES%) do set /A COUNT+=1
 
 if %COUNT%==1 (
     for %%P in (%CANDIDATES%) do set "SRC=%%~P"
-    echo [=] Profile found: !SRC!
+    echo [=] Profil topildi: !SRC!
 ) else (
-    echo Multiple profiles found:
+    echo Bir nechta profil topildi:
     set I=0
     for %%P in (%CANDIDATES%) do (
         set /A I+=1
         echo    [!I!] %%~P
     )
     echo.
-    set /P PICK=Pick profile number:
+    set /P PICK=Profil raqamini tanlang:
     set I=0
     for %%P in (%CANDIDATES%) do (
         set /A I+=1
         if "!I!"=="!PICK!" set "SRC=%%~P"
     )
     if "!SRC!"=="" (
-        echo [!] Invalid choice.
+        echo [!] Noto'g'ri tanlov.
         pause
         exit /b 1
     )
-    echo [=] Profile: !SRC!
+    echo [=] Profil: !SRC!
 )
 echo.
-if defined SYS_DRIVE echo [i] System drive: !SYS_DRIVE!
+if defined SYS_DRIVE echo [i] Tizim diski: !SYS_DRIVE!
 echo.
 
 rem ============================================================
-rem  4b) MODE SELECTION: FULL / INCREMENTAL / VERIFY
+rem  5) HAJMLARNI HISOBLASH VA JOY YETARLILIGINI TEKSHIRISH
 rem ============================================================
-echo Backup mode:
-echo    [1] Full backup (default - copy everything new)
-echo    [2] Incremental (copy only files changed since last backup)
-echo    [3] Mirror (make destination exactly match source - DELETES extra files on dest)
-set /P MODE=Pick mode (1/2/3) [1]:
-if "!MODE!"=="" set MODE=1
-if "!MODE!"=="2" (
-    set "ROBO_MODE=/XO"
-    echo [=] Mode: INCREMENTAL
-) else if "!MODE!"=="3" (
-    set "ROBO_MODE=/MIR"
-    echo [=] Mode: MIRROR
-) else (
-    set "ROBO_MODE="
-    echo [=] Mode: FULL
-)
-echo.
-
-set /P DOVERIFY=Verify copied files (hash check) at the end? (Y/N) [N]:
-if /I "!DOVERIFY!"=="Y" (set VERIFY=1) else (set VERIFY=0)
-
-set /P DOZIP=Compress final backup to ZIP at the end? (Y/N) [N]:
-if /I "!DOZIP!"=="Y" (set DOZIP=1) else (set DOZIP=0)
-echo.
-
-rem ============================================================
-rem  5) ESTIMATE SIZE
-rem ============================================================
-echo [i] Estimating profile size (few seconds)...
+echo [i] Profil hajmini hisoblash (bir necha soniya kutilsin)...
 set SRC_SIZE=0
 for /f "usebackq tokens=3" %%S in (`dir "!SRC!" /s /a-d 2^>nul ^| find "File(s)"`) do set SRC_SIZE=%%S
 set "SRC_SIZE_CLEAN=!SRC_SIZE:,=!"
+set SRC_GB=0
 if defined SRC_SIZE_CLEAN (
-    set /A SRC_GB=!SRC_SIZE_CLEAN!/1073741824
-    echo [i] Source profile size: approx !SRC_GB! GB
-)
-
-set FREE=
-for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do set "FREE=%%S"
-if defined FREE (
-    set /A FREE_GB=!FREE!/1073741824
-    echo [i] Destination free:    !FREE_GB! GB
-    if defined SRC_GB if !SRC_GB! GTR !FREE_GB! (
-        echo [!] WARNING: source may not fit on destination.
-        set /P GOON=Continue anyway? (Y/N):
-        if /I not "!GOON!"=="Y" exit /b 1
+    if not "!SRC_SIZE_CLEAN!"=="" (
+        set "SRC_SHORT=!SRC_SIZE_CLEAN:~0,-9!"
+        if "!SRC_SHORT!"=="" set "SRC_SHORT=0"
+        set "SRC_GB=!SRC_SHORT!"
     )
 )
+echo [i] Profil hajmi:        taxminan !SRC_GB! GB
+
+set FREE=0
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do set "FREE=%%S"
+set FREE_GB=0
+if defined FREE (
+    if not "!FREE!"=="" (
+        set "FREE_SHORT=!FREE:~0,-9!"
+        if "!FREE_SHORT!"=="" set "FREE_SHORT=0"
+        set "FREE_GB=!FREE_SHORT!"
+    )
+)
+echo [i] Fleshkada bo'sh joy: !FREE_GB! GB
 echo.
 
+if !SRC_GB! GTR !FREE_GB! (
+    echo ============================================================
+    echo [!] DIQQAT: ma'lumotlar fleshkaga sig'maydi!
+    echo     Profil hajmi:        !SRC_GB! GB
+    echo     Fleshkada bo'sh joy: !FREE_GB! GB
+    echo     Kerak bo'ladi:       taxminan !SRC_GB! GB
+    echo ============================================================
+    set /P GOON=Baribir davom ettirilsinmi? (H/Y) [Y]:
+    if /I "!GOON!"=="Y" exit /b 1
+    if /I "!GOON!"=="N" exit /b 1
+    echo [i] Davom etmoqda - fleshka to'lgandan keyin xatolik beradi.
+    echo.
+)
+
 rem ============================================================
-rem  6) TIMESTAMP + BACKUP FOLDER
+rem  6) VAQT MUHRI + ZAXIRA PAPKASI
 rem ============================================================
 set "STAMP="
 for /f "usebackq delims=" %%i in (`wmic os get localdatetime /value 2^>nul ^| find "="`) do (
@@ -260,41 +251,30 @@ if defined DT (
 
 for %%N in ("!SRC!") do set "UNAME=%%~nxN"
 set "BACKUP=!DST!\Backup_%UNAME%%STAMP%"
-
-rem For incremental, reuse last backup folder of same user
-if "!MODE!"=="2" (
-    set "LAST="
-    for /f "delims=" %%F in ('dir "!DST!\Backup_%UNAME%_*" /b /ad /o-n 2^>nul') do (
-        if not defined LAST set "LAST=%%F"
-    )
-    if defined LAST (
-        set "BACKUP=!DST!\!LAST!"
-        echo [=] Incremental: reusing existing folder !BACKUP!
-    )
-)
-
 mkdir "%BACKUP%" 2>nul
 mkdir "%BACKUP%\_SystemInfo" 2>nul
 set "LOG=%BACKUP%\_backup.log"
 set "SUMMARY=%BACKUP%\_summary.txt"
 set "REPORT=%BACKUP%\report.html"
 
-echo [=] Backup folder: %BACKUP%
-echo [=] Log file:      %LOG%
-echo [=] HTML report:   %REPORT%
+echo [=] Zaxira papkasi: %BACKUP%
+echo [=] Log fayli:      %LOG%
+echo [=] HTML hisobot:   %REPORT%
+echo.
+echo Nusxalash boshlanmoqda. Fayl nomlari va foiz ekranda ko'rinadi.
+echo To'xtatish uchun Ctrl+C bosing.
 echo.
 timeout /t 3 >nul
 
 > "%SUMMARY%" echo WinPE Backup Summary
 >> "%SUMMARY%" echo ====================
->> "%SUMMARY%" echo Source:      !SRC!
->> "%SUMMARY%" echo Destination: %BACKUP%
->> "%SUMMARY%" echo Mode:        !MODE!  (robocopy flags: !ROBO_MODE!)
->> "%SUMMARY%" echo Started:     %DATE% %TIME%
+>> "%SUMMARY%" echo Manba:     !SRC!
+>> "%SUMMARY%" echo Zaxira:    %BACKUP%
+>> "%SUMMARY%" echo Boshlandi: %DATE% %TIME%
 >> "%SUMMARY%" echo.
 
 rem ============================================================
-rem  7) MAIN FOLDER COPY
+rem  7) ASOSIY PAPKALARNI NUSXALASH
 rem ============================================================
 call :sect Desktop         "!SRC!\Desktop"
 call :sect Documents       "!SRC!\Documents"
@@ -308,7 +288,7 @@ call :roaming              "!SRC!\AppData\Roaming"
 call :local                "!SRC!\AppData\Local"
 
 rem ============================================================
-rem  8) SPECIAL ITEMS
+rem  8) QO'SHIMCHA FAYLLAR
 rem ============================================================
 call :bookmark "!SRC!\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" "Chrome_Bookmarks"
 call :bookmark "!SRC!\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" "Edge_Bookmarks"
@@ -324,86 +304,79 @@ call :scheduled_tasks
 call :user_certs
 
 rem ============================================================
-rem  9) SYSTEM INFO
+rem  9) TIZIM MA'LUMOTLARI
 rem ============================================================
 call :collect_sysinfo
 
 rem ============================================================
-rem 10) HTML REPORT + QR
+rem 10) HTML HISOBOT
 rem ============================================================
 call :make_html_report
 
-rem ============================================================
-rem 11) OPTIONAL VERIFY + ZIP
-rem ============================================================
-if "!VERIFY!"=="1" call :verify_backup
-if "!DOZIP!"=="1" call :zip_backup
-
 >> "%SUMMARY%" echo.
->> "%SUMMARY%" echo Finished:    %DATE% %TIME%
+>> "%SUMMARY%" echo Tugadi:    %DATE% %TIME%
 
 echo.
 echo ============================================================
-echo    DONE
-echo    Folder:  %BACKUP%
-echo    Log:     %LOG%
-echo    Summary: %SUMMARY%
-echo    Report:  %REPORT%
+echo    TUGADI
+echo    Papka:    %BACKUP%
+echo    Log:      %LOG%
+echo    Hisobot:  %REPORT%
 echo ============================================================
 echo.
 pause
 exit /b 0
 
 rem ---------------------------------------------------------------------------
-rem                             COPY FUNCTIONS
+rem                              NUSXALASH FUNKSIYALARI
 rem ---------------------------------------------------------------------------
 
 :sect
 set "SNAME=%~1"
 set "SPATH=%~2"
 if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] %SNAME% - not present
+    >> "%SUMMARY%" echo [skip] %SNAME% - mavjud emas
     exit /b 0
 )
 echo.
 echo ================= %SNAME% =================
-robocopy "%SPATH%" "%BACKUP%\%SNAME%" /E %ROBO_MODE% /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock"
+robocopy "%SPATH%" "%BACKUP%\%SNAME%" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock"
 >> "%SUMMARY%" echo [ok]   %SNAME% - rc=!errorlevel!
 exit /b 0
 
 :downloads
 set "SPATH=%~1"
 if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] Downloads - not present
+    >> "%SUMMARY%" echo [skip] Downloads - mavjud emas
     exit /b 0
 )
 echo.
-echo ================= Downloads (no installers) =================
-robocopy "%SPATH%" "%BACKUP%\Downloads" /E %ROBO_MODE% /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm"
+echo ================= Downloads (installerlardan tashqari) =================
+robocopy "%SPATH%" "%BACKUP%\Downloads" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm"
 >> "%SUMMARY%" echo [ok]   Downloads - rc=!errorlevel!
 exit /b 0
 
 :roaming
 set "SPATH=%~1"
 if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] AppData\Roaming - not present
+    >> "%SUMMARY%" echo [skip] AppData\Roaming - mavjud emas
     exit /b 0
 )
 echo.
 echo ================= AppData\Roaming =================
-robocopy "%SPATH%" "%BACKUP%\AppData_Roaming" /E %ROBO_MODE% /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
+robocopy "%SPATH%" "%BACKUP%\AppData_Roaming" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
 >> "%SUMMARY%" echo [ok]   AppData\Roaming - rc=!errorlevel!
 exit /b 0
 
 :local
 set "SPATH=%~1"
 if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] AppData\Local - not present
+    >> "%SUMMARY%" echo [skip] AppData\Local - mavjud emas
     exit /b 0
 )
 echo.
 echo ================= AppData\Local =================
-robocopy "%SPATH%" "%BACKUP%\AppData_Local" /E %ROBO_MODE% /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
+robocopy "%SPATH%" "%BACKUP%\AppData_Local" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
 >> "%SUMMARY%" echo [ok]   AppData\Local - rc=!errorlevel!
 exit /b 0
 
@@ -412,27 +385,22 @@ set "BPATH=%~1"
 set "BNAME=%~2"
 if not exist "%BPATH%" exit /b 0
 echo.
-echo ================= Bookmark export: %BNAME% =================
+echo ================= Xatcho'plar: %BNAME% =================
 mkdir "%BACKUP%\_Bookmarks" 2>nul
 if exist "%BPATH%\*" (
     robocopy "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" /E /R:1 /W:1 /XJ /NFL /NDL /NP /TEE /LOG+:"%LOG%"
 ) else (
     copy /Y "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" >nul 2>&1
-    echo Copied %BPATH%
+    echo Nusxalandi: %BPATH%
 )
->> "%SUMMARY%" echo [ok]   bookmark: %BNAME%
+>> "%SUMMARY%" echo [ok]   xatcho'p: %BNAME%
 exit /b 0
-
-rem ---------------------------------------------------------------------------
-rem                             SPECIAL ITEMS
-rem ---------------------------------------------------------------------------
 
 :outlook_data
 echo.
-echo ================= Outlook data (.pst / .ost) =================
+echo ================= Outlook (.pst / .ost) =================
 mkdir "%BACKUP%\_Outlook" 2>nul
 set FOUND=0
-rem Common Outlook locations
 for %%P in (
     "!SRC!\Documents\Outlook Files"
     "!SRC!\AppData\Local\Microsoft\Outlook"
@@ -446,13 +414,13 @@ for %%P in (
 if !FOUND!==1 (
     >> "%SUMMARY%" echo [ok]   Outlook .pst/.ost
 ) else (
-    >> "%SUMMARY%" echo [skip] Outlook - no data found
+    >> "%SUMMARY%" echo [skip] Outlook - topilmadi
 )
 exit /b 0
 
 :rdp_files
 echo.
-echo ================= RDP connections =================
+echo ================= RDP ulanishlari =================
 mkdir "%BACKUP%\_RDP" 2>nul
 set FOUND=0
 if exist "!SRC!\Documents\*.rdp" (
@@ -463,28 +431,26 @@ if exist "!SRC!\Documents\Default.rdp" (
     copy /Y "!SRC!\Documents\Default.rdp" "%BACKUP%\_RDP\" >nul 2>&1
     set FOUND=1
 )
-rem Remote Desktop Connection Manager
 if exist "!SRC!\AppData\Local\Microsoft\Remote Desktop" (
     robocopy "!SRC!\AppData\Local\Microsoft\Remote Desktop" "%BACKUP%\_RDP\RD_App" /E /R:1 /W:1 /NFL /NDL /NP >nul
     set FOUND=1
 )
 if !FOUND!==1 (
-    >> "%SUMMARY%" echo [ok]   RDP files
+    >> "%SUMMARY%" echo [ok]   RDP fayllari
 ) else (
-    >> "%SUMMARY%" echo [skip] RDP - none
+    >> "%SUMMARY%" echo [skip] RDP - yo'q
 )
 exit /b 0
 
 :ssh_keys
 echo.
-echo ================= SSH keys =================
+echo ================= SSH kalitlari =================
 if exist "!SRC!\.ssh" (
     robocopy "!SRC!\.ssh" "%BACKUP%\_SSH" /E /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
-    >> "%SUMMARY%" echo [ok]   .ssh keys
+    >> "%SUMMARY%" echo [ok]   .ssh kalitlari
 ) else (
-    >> "%SUMMARY%" echo [skip] .ssh - none
+    >> "%SUMMARY%" echo [skip] .ssh - yo'q
 )
-rem PuTTY saved sessions (in registry)
 if defined SYS_DRIVE (
     set "NTUSER=!SRC!\NTUSER.DAT"
     if exist "!NTUSER!" (
@@ -492,7 +458,7 @@ if defined SYS_DRIVE (
         if not errorlevel 1 (
             reg export "HKU\OFFLINE_USER\Software\SimonTatham" "%BACKUP%\_SSH\putty_sessions.reg" /y >nul 2>&1
             reg unload HKU\OFFLINE_USER >nul 2>&1
-            if exist "%BACKUP%\_SSH\putty_sessions.reg" >> "%SUMMARY%" echo [ok]   PuTTY sessions exported
+            if exist "%BACKUP%\_SSH\putty_sessions.reg" >> "%SUMMARY%" echo [ok]   PuTTY sessiyalari
         )
     )
 )
@@ -500,61 +466,56 @@ exit /b 0
 
 :user_fonts
 echo.
-echo ================= User fonts =================
+echo ================= Foydalanuvchi shriftlari =================
 set "FDIR=!SRC!\AppData\Local\Microsoft\Windows\Fonts"
 if exist "!FDIR!" (
     robocopy "!FDIR!" "%BACKUP%\_UserFonts" /E /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
-    >> "%SUMMARY%" echo [ok]   User fonts
+    >> "%SUMMARY%" echo [ok]   shriftlar
 ) else (
-    >> "%SUMMARY%" echo [skip] User fonts - none
+    >> "%SUMMARY%" echo [skip] shriftlar - yo'q
 )
 exit /b 0
 
 :sticky_notes
 echo.
-echo ================= Sticky Notes =================
+echo ================= Sticky Notes (stikerlar) =================
 set FOUND=0
-rem Modern Sticky Notes (Win 10/11)
 for /D %%P in ("!SRC!\AppData\Local\Packages\Microsoft.MicrosoftStickyNotes_*") do (
     if exist "%%P\LocalState" (
         robocopy "%%P\LocalState" "%BACKUP%\_StickyNotes\Modern" /E /R:1 /W:1 /NFL /NDL /NP >nul
         set FOUND=1
     )
 )
-rem Legacy Sticky Notes (Win 7/8)
 if exist "!SRC!\AppData\Roaming\Microsoft\Sticky Notes" (
     robocopy "!SRC!\AppData\Roaming\Microsoft\Sticky Notes" "%BACKUP%\_StickyNotes\Legacy" /E /R:1 /W:1 /NFL /NDL /NP >nul
     set FOUND=1
 )
 if !FOUND!==1 (
-    >> "%SUMMARY%" echo [ok]   Sticky Notes
+    >> "%SUMMARY%" echo [ok]   stikerlar
 ) else (
-    >> "%SUMMARY%" echo [skip] Sticky Notes - none
+    >> "%SUMMARY%" echo [skip] stikerlar - yo'q
 )
 exit /b 0
 
 :hosts_file
 echo.
-echo ================= Hosts file =================
+echo ================= hosts fayli =================
 if defined SYS_DRIVE (
     set "HOSTS=!SYS_DRIVE!\Windows\System32\drivers\etc\hosts"
     if exist "!HOSTS!" (
-        mkdir "%BACKUP%\_SystemInfo" 2>nul
         copy /Y "!HOSTS!" "%BACKUP%\_SystemInfo\hosts" >nul 2>&1
-        >> "%SUMMARY%" echo [ok]   hosts file
+        >> "%SUMMARY%" echo [ok]   hosts
     )
 )
 exit /b 0
 
 :scheduled_tasks
 echo.
-echo ================= Scheduled tasks =================
+echo ================= Rejalashtiruvchi vazifalari =================
 mkdir "%BACKUP%\_SystemInfo\ScheduledTasks" 2>nul
 where schtasks >nul 2>&1
 if not errorlevel 1 (
-    rem Export full list in CSV
     schtasks /query /fo CSV /v > "%BACKUP%\_SystemInfo\ScheduledTasks\tasks_list.csv" 2>nul
-    rem Export each task as XML (preserves full definition for restore)
     for /f "usebackq tokens=1 delims=," %%T in (`schtasks /query /fo CSV /nh 2^>nul`) do (
         set "TNAME=%%~T"
         if defined TNAME if not "!TNAME!"=="TaskName" (
@@ -566,44 +527,40 @@ if not errorlevel 1 (
             schtasks /query /tn "!TNAME!" /xml > "%BACKUP%\_SystemInfo\ScheduledTasks\!SAFE!.xml" 2>nul
         )
     )
-    >> "%SUMMARY%" echo [ok]   scheduled tasks
+    >> "%SUMMARY%" echo [ok]   vazifalar
 ) else (
-    >> "%SUMMARY%" echo [skip] schtasks not available
+    >> "%SUMMARY%" echo [skip] schtasks yo'q
 )
 exit /b 0
 
 :user_certs
 echo.
-echo ================= User certificates =================
+echo ================= Sertifikatlar =================
 mkdir "%BACKUP%\_SystemInfo\Certs" 2>nul
 where certutil >nul 2>&1
 if not errorlevel 1 (
     certutil -store -user my > "%BACKUP%\_SystemInfo\Certs\user_personal.txt" 2>nul
     certutil -store -user root > "%BACKUP%\_SystemInfo\Certs\user_trusted_root.txt" 2>nul
     certutil -store -user ca > "%BACKUP%\_SystemInfo\Certs\user_intermediate.txt" 2>nul
-    >> "%SUMMARY%" echo [ok]   certificates list
-    > "%BACKUP%\_SystemInfo\Certs\_README.txt" echo These are text listings of certificates in the user store.
-    >> "%BACKUP%\_SystemInfo\Certs\_README.txt" echo Private keys cannot be exported by certutil without a password.
-    >> "%BACKUP%\_SystemInfo\Certs\_README.txt" echo To export a specific cert with private key, run:
-    >> "%BACKUP%\_SystemInfo\Certs\_README.txt" echo    certutil -user -exportPFX my ^<SerialNumber^> cert.pfx
+    >> "%SUMMARY%" echo [ok]   sertifikatlar ro'yxati
 ) else (
-    >> "%SUMMARY%" echo [skip] certutil not available
+    >> "%SUMMARY%" echo [skip] certutil yo'q
 )
 exit /b 0
 
 rem ---------------------------------------------------------------------------
-rem                           SYSTEM INFO BLOCK
+rem                           TIZIM MA'LUMOTLARI
 rem ---------------------------------------------------------------------------
 
 :collect_sysinfo
 echo.
-echo ================= Collecting system info =================
+echo ================= Tizim ma'lumotlarini yig'ish =================
 set "SI=%BACKUP%\_SystemInfo"
 
-rem --- Installed programs via registry ---
+rem --- O'rnatilgan dasturlar ---
 set "APPS_TXT=%SI%\installed_programs.txt"
-> "%APPS_TXT%" echo Installed programs (from registry)
->> "%APPS_TXT%" echo ===================================
+> "%APPS_TXT%" echo O'rnatilgan dasturlar (registrydan)
+>> "%APPS_TXT%" echo ====================================
 >> "%APPS_TXT%" echo.
 
 if defined SYS_DRIVE (
@@ -611,7 +568,7 @@ if defined SYS_DRIVE (
     if exist "!HIVE!" (
         reg load HKLM\OFFLINE_SW "!HIVE!" >nul 2>&1
         if not errorlevel 1 (
-            echo --- 64-bit apps --- >> "%APPS_TXT%"
+            echo --- 64-bit dasturlar --- >> "%APPS_TXT%"
             for /f "tokens=*" %%K in ('reg query "HKLM\OFFLINE_SW\Microsoft\Windows\CurrentVersion\Uninstall" 2^>nul') do (
                 for /f "tokens=2,*" %%A in ('reg query "%%K" /v DisplayName 2^>nul ^| find "REG_SZ"') do (
                     for /f "tokens=2,*" %%C in ('reg query "%%K" /v DisplayVersion 2^>nul ^| find "REG_SZ"') do (
@@ -620,7 +577,7 @@ if defined SYS_DRIVE (
                 )
             )
             echo. >> "%APPS_TXT%"
-            echo --- 32-bit apps --- >> "%APPS_TXT%"
+            echo --- 32-bit dasturlar --- >> "%APPS_TXT%"
             for /f "tokens=*" %%K in ('reg query "HKLM\OFFLINE_SW\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" 2^>nul') do (
                 for /f "tokens=2,*" %%A in ('reg query "%%K" /v DisplayName 2^>nul ^| find "REG_SZ"') do (
                     for /f "tokens=2,*" %%C in ('reg query "%%K" /v DisplayVersion 2^>nul ^| find "REG_SZ"') do (
@@ -633,18 +590,18 @@ if defined SYS_DRIVE (
         )
     )
 )
->> "%SUMMARY%" echo [ok]   installed_programs.txt
+>> "%SUMMARY%" echo [ok]   o'rnatilgan dasturlar
 
-rem --- Wi-Fi profiles ---
+rem --- Wi-Fi profillari ---
 set "WIFI_DIR=%SI%\WiFi"
 mkdir "%WIFI_DIR%" 2>nul
 
 netsh wlan show profiles >nul 2>&1
 if not errorlevel 1 (
-    echo [i] Exporting Wi-Fi profiles with cleartext passwords...
+    echo [i] Wi-Fi parollarini eksport qilish...
     netsh wlan export profile key=clear folder="%WIFI_DIR%" >nul 2>&1
-    > "%WIFI_DIR%\_wifi_passwords.txt" echo Wi-Fi profiles (SSID : password)
-    >> "%WIFI_DIR%\_wifi_passwords.txt" echo =================================
+    > "%WIFI_DIR%\_wifi_passwords.txt" echo Wi-Fi profillari (SSID : parol)
+    >> "%WIFI_DIR%\_wifi_passwords.txt" echo ================================
     for /f "tokens=2 delims=:" %%P in ('netsh wlan show profiles 2^>nul ^| find "All User Profile"') do (
         set "PNAME=%%P"
         set "PNAME=!PNAME:~1!"
@@ -656,27 +613,27 @@ if not errorlevel 1 (
         if defined PASS (
             >> "%WIFI_DIR%\_wifi_passwords.txt" echo !PNAME! : !PASS!
         ) else (
-            >> "%WIFI_DIR%\_wifi_passwords.txt" echo !PNAME! : [open]
+            >> "%WIFI_DIR%\_wifi_passwords.txt" echo !PNAME! : [ochiq tarmoq]
         )
     )
-    echo [ok] Wi-Fi profiles exported
+    echo [ok] Wi-Fi profillari
 ) else (
     if defined SYS_DRIVE (
         set "WLAN_SRC=!SYS_DRIVE!\ProgramData\Microsoft\Wlansvc\Profiles\Interfaces"
         if exist "!WLAN_SRC!" (
             robocopy "!WLAN_SRC!" "%WIFI_DIR%\RawProfiles" /E /R:1 /W:1 /NFL /NDL /NP >nul
-            > "%WIFI_DIR%\_README.txt" echo Wi-Fi XML files are DPAPI-encrypted.
-            >> "%WIFI_DIR%\_README.txt" echo Decrypt only on original Windows: netsh wlan show profile name="SSID" key=clear
-            echo [ok] Raw Wi-Fi XML copied
+            > "%WIFI_DIR%\_README.txt" echo Wi-Fi XML fayllari DPAPI bilan shifrlangan.
+            >> "%WIFI_DIR%\_README.txt" echo Faqat asl Windows'da ochiladi: netsh wlan show profile name="SSID" key=clear
+            echo [ok] Wi-Fi XML (shifrlangan)
         )
     )
 )
->> "%SUMMARY%" echo [ok]   WiFi profiles
+>> "%SUMMARY%" echo [ok]   Wi-Fi profillari
 
-rem --- Windows product key ---
+rem --- Windows kaliti ---
 set "KEY_TXT=%SI%\windows_product_key.txt"
-> "%KEY_TXT%" echo Windows Product Key info
->> "%KEY_TXT%" echo ========================
+> "%KEY_TXT%" echo Windows Product Key
+>> "%KEY_TXT%" echo ===================
 >> "%KEY_TXT%" echo.
 for /f "usebackq tokens=2 delims==" %%K in (`wmic path softwarelicensingservice get OA3xOriginalProductKey /value 2^>nul ^| find "="`) do (
     >> "%KEY_TXT%" echo OEM Key (BIOS):  %%K
@@ -693,26 +650,26 @@ if defined SYS_DRIVE (
         reg unload HKLM\OFFLINE_SW2 >nul 2>&1
     )
 )
->> "%SUMMARY%" echo [ok]   windows_product_key.txt
+>> "%SUMMARY%" echo [ok]   Windows kaliti
 
-rem --- Drivers ---
+rem --- Drayverlar ---
 if defined SYS_DRIVE (
     where dism >nul 2>&1
     if not errorlevel 1 (
-        echo [i] Exporting drivers...
+        echo [i] Drayverlarni eksport qilish...
         mkdir "%SI%\Drivers" 2>nul
         dism /image:!SYS_DRIVE!\ /export-driver /destination:"%SI%\Drivers" >nul 2>&1
         if not errorlevel 1 (
-            echo [ok] Drivers exported
-            >> "%SUMMARY%" echo [ok]   drivers
+            echo [ok] Drayverlar
+            >> "%SUMMARY%" echo [ok]   drayverlar
         )
     )
 )
 
-rem --- Hardware info ---
+rem --- Qurilma ma'lumotlari ---
 set "HW=%SI%\hardware.txt"
-> "%HW%" echo Hardware info
->> "%HW%" echo =============
+> "%HW%" echo Qurilma ma'lumotlari
+>> "%HW%" echo =====================
 >> "%HW%" echo.
 echo --- CPU --- >> "%HW%"
 wmic cpu get Name,NumberOfCores,MaxClockSpeed /format:list 2>nul >> "%HW%"
@@ -720,7 +677,7 @@ echo --- RAM --- >> "%HW%"
 wmic memorychip get Capacity,Speed,Manufacturer /format:list 2>nul >> "%HW%"
 echo --- GPU --- >> "%HW%"
 wmic path win32_videocontroller get Name,AdapterRAM /format:list 2>nul >> "%HW%"
-echo --- Disks --- >> "%HW%"
+echo --- Disklar --- >> "%HW%"
 wmic diskdrive get Model,Size,MediaType /format:list 2>nul >> "%HW%"
 echo --- Motherboard --- >> "%HW%"
 wmic baseboard get Manufacturer,Product,Version /format:list 2>nul >> "%HW%"
@@ -731,109 +688,12 @@ wmic bios get Manufacturer,SMBIOSBIOSVersion,ReleaseDate /format:list 2>nul >> "
 exit /b 0
 
 rem ---------------------------------------------------------------------------
-rem                              VERIFY
-rem ---------------------------------------------------------------------------
-
-:verify_backup
-echo.
-echo ================= Verify (hashing) =================
-set "VLOG=%BACKUP%\_verify.log"
-> "%VLOG%" echo Verification report - %DATE% %TIME%
->> "%VLOG%" echo =====================================
-
-where certutil >nul 2>&1
-if errorlevel 1 (
-    echo [!] certutil not available - skipping verify
-    >> "%SUMMARY%" echo [skip] verify (no certutil)
-    exit /b 0
-)
-
-set OK=0
-set BAD=0
-set MISS=0
-
-rem Verify a sample: all files in Documents (full hash takes forever on 100GB)
-echo [i] Verifying Documents folder with SHA256 (sample)...
-if exist "%BACKUP%\Documents" (
-    for /r "%BACKUP%\Documents" %%F in (*) do (
-        set "DST_FILE=%%F"
-        set "REL=!DST_FILE:%BACKUP%\Documents\=!"
-        set "SRC_FILE=!SRC!\Documents\!REL!"
-        if exist "!SRC_FILE!" (
-            for /f "skip=1 tokens=*" %%H in ('certutil -hashfile "!SRC_FILE!" SHA256 2^>nul') do (
-                set "SH=%%H"
-                goto :got_src
-            )
-            :got_src
-            for /f "skip=1 tokens=*" %%H in ('certutil -hashfile "!DST_FILE!" SHA256 2^>nul') do (
-                set "DH=%%H"
-                goto :got_dst
-            )
-            :got_dst
-            if "!SH!"=="!DH!" (
-                set /A OK+=1
-            ) else (
-                set /A BAD+=1
-                >> "%VLOG%" echo MISMATCH: !REL!
-            )
-            set SH=
-            set DH=
-        ) else (
-            set /A MISS+=1
-        )
-    )
-)
-echo [i] Verify done: OK=!OK!  MISMATCH=!BAD!  MISSING-ON-SRC=!MISS!
->> "%VLOG%" echo.
->> "%VLOG%" echo Results: OK=!OK!  MISMATCH=!BAD!  MISSING=!MISS!
->> "%SUMMARY%" echo [ok]   verify: OK=!OK!/BAD=!BAD!/MISS=!MISS!
-exit /b 0
-
-rem ---------------------------------------------------------------------------
-rem                              ZIP
-rem ---------------------------------------------------------------------------
-
-:zip_backup
-echo.
-echo ================= Compressing to ZIP =================
-set "ZIPFILE=%BACKUP%.zip"
-where tar >nul 2>&1
-if not errorlevel 1 (
-    rem Windows 10/11 ship with bsdtar which can create .zip via -a flag
-    echo [i] Using tar (bsdtar)...
-    pushd "!DST!"
-    for %%N in ("%BACKUP%") do set "BNAME=%%~nxN"
-    tar -a -c -f "!ZIPFILE!" "!BNAME!"
-    popd
-    if exist "!ZIPFILE!" (
-        echo [ok] ZIP created: !ZIPFILE!
-        >> "%SUMMARY%" echo [ok]   zip created
-        exit /b 0
-    )
-)
-
-where powershell >nul 2>&1
-if not errorlevel 1 (
-    echo [i] Using PowerShell Compress-Archive...
-    powershell -NoProfile -Command "Compress-Archive -Path '%BACKUP%\*' -DestinationPath '!ZIPFILE!' -Force" 2>nul
-    if exist "!ZIPFILE!" (
-        echo [ok] ZIP created: !ZIPFILE!
-        >> "%SUMMARY%" echo [ok]   zip created
-        exit /b 0
-    )
-)
-
-echo [!] No compression tool available
->> "%SUMMARY%" echo [skip] zip - no tool
-exit /b 0
-
-rem ---------------------------------------------------------------------------
-rem                           HTML REPORT + QR
+rem                              HTML HISOBOT
 rem ---------------------------------------------------------------------------
 
 :make_html_report
 echo.
-echo ================= Building HTML report =================
+echo ================= HTML hisobotini yaratish =================
 set "TMP_STATS=%BACKUP%\_stats.tmp"
 > "%TMP_STATS%" echo.
 
@@ -846,7 +706,7 @@ call :count_cat "Code"       "py js ts java c cpp h hpp cs go rs rb php html css
 call :count_cat "Executables" "exe msi msix appx bat cmd ps1 app"
 
 > "%REPORT%" echo ^<!DOCTYPE html^>
->> "%REPORT%" echo ^<html lang="en"^>^<head^>^<meta charset="UTF-8"^>
+>> "%REPORT%" echo ^<html lang="uz"^>^<head^>^<meta charset="UTF-8"^>
 >> "%REPORT%" echo ^<title^>Backup Report - %UNAME%^</title^>
 >> "%REPORT%" echo ^<style^>
 >> "%REPORT%" echo body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:2rem;line-height:1.6}
@@ -866,20 +726,18 @@ call :count_cat "Executables" "exe msi msix appx bat cmd ps1 app"
 >> "%REPORT%" echo th,td{text-align:left;padding:.6rem;border-bottom:1px solid #334155}
 >> "%REPORT%" echo th{background:#1e293b;color:#93c5fd}
 >> "%REPORT%" echo tr:hover{background:#1e293b}
->> "%REPORT%" echo .qr{background:#fff;padding:1rem;border-radius:8px;display:inline-block;margin:1rem 0}
->> "%REPORT%" echo .qr svg{display:block}
 >> "%REPORT%" echo .footer{color:#64748b;font-size:.85rem;margin-top:3rem;text-align:center;border-top:1px solid #334155;padding-top:1rem}
 >> "%REPORT%" echo ^</style^>^</head^>^<body^>^<div class="container"^>
->> "%REPORT%" echo ^<h1^>Backup Report^</h1^>
+>> "%REPORT%" echo ^<h1^>Zaxira hisoboti^</h1^>
 >> "%REPORT%" echo ^<div class="meta"^>
->> "%REPORT%" echo ^<b^>User:^</b^> %UNAME%^<br^>
->> "%REPORT%" echo ^<b^>Source:^</b^> !SRC!^<br^>
->> "%REPORT%" echo ^<b^>Destination:^</b^> %BACKUP%^<br^>
->> "%REPORT%" echo ^<b^>Date:^</b^> %DATE% %TIME%^<br^>
-if defined SRC_GB >> "%REPORT%" echo ^<b^>Total size:^</b^> ~!SRC_GB! GB^<br^>
+>> "%REPORT%" echo ^<b^>Foydalanuvchi:^</b^> %UNAME%^<br^>
+>> "%REPORT%" echo ^<b^>Manba:^</b^> !SRC!^<br^>
+>> "%REPORT%" echo ^<b^>Zaxira joyi:^</b^> %BACKUP%^<br^>
+>> "%REPORT%" echo ^<b^>Sana:^</b^> %DATE% %TIME%^<br^>
+>> "%REPORT%" echo ^<b^>Umumiy hajm:^</b^> ~!SRC_GB! GB^<br^>
 >> "%REPORT%" echo ^</div^>
 
->> "%REPORT%" echo ^<h2^>Files by category^</h2^>
+>> "%REPORT%" echo ^<h2^>Fayllar toifalari bo'yicha^</h2^>
 >> "%REPORT%" echo ^<div class="grid"^>
 
 set MAXCOUNT=0
@@ -890,13 +748,12 @@ if !MAXCOUNT!==0 set MAXCOUNT=1
 
 for /f "tokens=1,2 delims=|" %%A in (%TMP_STATS%) do (
     set /A PCT=%%B*100/!MAXCOUNT!
-    >> "%REPORT%" echo ^<div class="card"^>^<div class="name"^>%%A^</div^>^<div class="count"^>%%B^</div^>^<div class="size"^>files^</div^>^<div class="bar"^>^<div style="width:!PCT!%%"^>^</div^>^</div^>^</div^>
+    >> "%REPORT%" echo ^<div class="card"^>^<div class="name"^>%%A^</div^>^<div class="count"^>%%B^</div^>^<div class="size"^>fayl^</div^>^<div class="bar"^>^<div style="width:!PCT!%%"^>^</div^>^</div^>^</div^>
 )
 >> "%REPORT%" echo ^</div^>
 
-rem --- Top 20 largest ---
->> "%REPORT%" echo ^<h2^>Top 20 largest files^</h2^>
->> "%REPORT%" echo ^<table^>^<tr^>^<th^>Size (MB)^</th^>^<th^>File^</th^>^</tr^>
+>> "%REPORT%" echo ^<h2^>Eng katta 20 ta fayl^</h2^>
+>> "%REPORT%" echo ^<table^>^<tr^>^<th^>Hajm (MB)^</th^>^<th^>Fayl^</th^>^</tr^>
 
 set "BIG_TMP=%BACKUP%\_big.tmp"
 if exist "%BIG_TMP%" del "%BIG_TMP%"
@@ -916,45 +773,21 @@ for /f "usebackq tokens=1,2 delims=|" %%A in ("%BIG_TMP%") do (
 )
 >> "%REPORT%" echo ^</table^>
 
->> "%REPORT%" echo ^<h2^>Backup contents^</h2^>
->> "%REPORT%" echo ^<table^>^<tr^>^<th^>Folder^</th^>^</tr^>
+>> "%REPORT%" echo ^<h2^>Zaxira tarkibi^</h2^>
+>> "%REPORT%" echo ^<table^>^<tr^>^<th^>Papka^</th^>^</tr^>
 for /D %%D in ("%BACKUP%\*") do (
     >> "%REPORT%" echo ^<tr^>^<td^>%%~nxD^</td^>^</tr^>
 )
 >> "%REPORT%" echo ^</table^>
 
-rem --- QR Code with summary (via PowerShell + QRCoder-free simple approach) ---
-rem Since no internet in WinPE, build QR with built-in logic: use PowerShell + .NET
-rem We embed the backup path as text in a QR, rendered via a tiny inline library.
-rem Simpler: just encode a short URL to the summary.txt path.
-
-where powershell >nul 2>&1
-if not errorlevel 1 (
-    echo [i] Generating QR code image...
-    set "QR_PNG=%BACKUP%\_qr.png"
-    set "QR_TEXT=Backup: %BACKUP% | User: %UNAME% | Date: %DATE%"
-    powershell -NoProfile -Command "try { Add-Type -AssemblyName System.Drawing; $u = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + [uri]::EscapeDataString('!QR_TEXT!'); (New-Object Net.WebClient).DownloadFile($u, '!QR_PNG!') } catch { }" 2>nul
-    if exist "!QR_PNG!" (
-        >> "%REPORT%" echo ^<h2^>Quick view (QR)^</h2^>
-        >> "%REPORT%" echo ^<div class="qr"^>^<img src="_qr.png" alt="QR"^>^</div^>
-        >> "%REPORT%" echo ^<p^>Scan with phone to see backup location.^</p^>
-    ) else (
-        >> "%REPORT%" echo ^<h2^>Quick view^</h2^>
-        >> "%REPORT%" echo ^<p^>!QR_TEXT!^</p^>
-    )
-) else (
-    >> "%REPORT%" echo ^<h2^>Quick view^</h2^>
-    >> "%REPORT%" echo ^<p^>Backup: %BACKUP%^</p^>
-)
-
->> "%REPORT%" echo ^<div class="footer"^>Generated by winpe-backup.cmd on %DATE% %TIME%^</div^>
+>> "%REPORT%" echo ^<div class="footer"^>winpe-backup.cmd tomonidan yaratilgan - %DATE% %TIME%^</div^>
 >> "%REPORT%" echo ^</div^>^</body^>^</html^>
 
 del "%TMP_STATS%" 2>nul
 del "%BIG_TMP%" 2>nul
 
->> "%SUMMARY%" echo [ok]   HTML report
-echo [ok] HTML report built
+>> "%SUMMARY%" echo [ok]   HTML hisobot
+echo [ok] HTML hisobot tayyor
 exit /b 0
 
 :count_cat
