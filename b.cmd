@@ -1,18 +1,19 @@
 @echo off
 rem ============================================================================
-rem  winpe-backup.cmd  -  WinPE'dan foydalanuvchi profilini zaxiralash
-rem  Barcha xabarlar o'zbekcha (lotin) - WinPE'da kirill shriftlari ko'pincha
-rem  ishlamaydi, shuning uchun lotin yozuv tanlangan.
+rem  b.cmd  -  WinPE Backup: foydalanuvchi ma'lumotlarini zaxiralash
+rem  Barcha xabarlar o'zbekcha (lotin alifbosi).
 rem ============================================================================
 
 setlocal EnableDelayedExpansion
 title WinPE Backup
-color 07
+color 0B
+mode con cols=100 lines=40 2>nul
+cls
 
 echo.
-echo ============================================================
+echo  ============================================================================
 echo    WinPE Backup  -  foydalanuvchi ma'lumotlarini zaxiralash
-echo ============================================================
+echo  ============================================================================
 echo.
 
 rem ============================================================
@@ -20,14 +21,17 @@ rem  0) ADMIN TEKSHIRUV
 rem ============================================================
 net session >nul 2>&1
 if errorlevel 1 (
-    echo [i] Diqqat: administrator huquqisiz ishga tushirilgan.
-    echo     Ba'zi himoyalangan fayllar o'tkazib yuborilishi mumkin.
+    echo  [!] Diqqat: administrator huquqisiz ishga tushirilgan.
+    echo      Ba'zi himoyalangan fayllar o'tkazib yuborilishi mumkin.
     echo.
 )
 
 rem ============================================================
-rem  1) DISKLARNI ANIQLASH - 3 bosqichli fallback
+rem  1) BARCHA DISKLARNI TOPISH
 rem ============================================================
+echo  [*] Disklar aniqlanmoqda...
+echo.
+
 set ALL_DRIVES=
 set DETECT_METHOD=none
 
@@ -58,181 +62,236 @@ for %%L in (A B C D E F G H I J K L M N O P Q R S T U V W Y Z) do (
 
 :drives_done
 if "%ALL_DRIVES%"=="" (
-    echo [!] Hech qanday disk topilmadi.
+    echo  [!] Hech qanday disk topilmadi. ESC bosib chiqing.
     pause
     exit /b 1
 )
-echo [i] Disklarni aniqlash usuli: %DETECT_METHOD%
-echo [i] Topilgan disklar:         %ALL_DRIVES%
-echo.
 
 rem ============================================================
-rem  2) DISKLARNI AJRATISH
+rem  2) DISKLAR JADVALI - har bir disk haqida to'liq ma'lumot
 rem ============================================================
-set DESTS=
-set SOURCES=
+echo  ============================================================================
+echo    MAVJUD DISKLAR
+echo  ============================================================================
+echo.
+echo    #   Harf   Hajm        Bo'sh       Tip               Metka
+echo    -------------------------------------------------------------------------
+set DNUM=0
 for %%L in (%ALL_DRIVES%) do (
-    set "L=%%L"
-    if /I not "!L!"=="X:" (
-        if not exist "!L!\Windows\System32\" set DESTS=!DESTS! "!L!"
-    )
-    if exist "!L!\Users\" set SOURCES=!SOURCES! "!L!"
+    set /A DNUM+=1
+    set "DRV_!DNUM!=%%L"
+    call :print_disk !DNUM! "%%L"
 )
+echo    -------------------------------------------------------------------------
+echo.
+echo    [i] X: - bu WinPE ichki diski (unga tegmang).
+echo    [i] Windows o'rnatilgan disk odatda eng katta NTFS disk hisoblanadi.
+echo    [i] Fleshkangiz odatda "Sменный" (Removable) tipida ko'rinadi.
+echo.
 
 rem ============================================================
-rem  3) MANZIL (fleshka) TANLASH
+rem  3) MANZIL (fleshka) TANLASH - QO'LDA
 rem ============================================================
-if "%DESTS%"=="" (
-    echo [!] Zaxira uchun disk topilmadi.
-    echo     Fleshkani ulang va qaytadan ishga tushiring.
-    pause
-    exit /b 1
+echo  ============================================================================
+echo    1-QADAM: ZAXIRA UCHUN DISK TANLASH (fleshka)
+echo  ============================================================================
+echo.
+echo    Qaysi diskka ma'lumotlar nusxalanadi? (odatda bu sizning fleshkangiz)
+echo.
+:ask_dst
+set "DPICK="
+set /P DPICK=  Disk raqamini kiriting (1-%DNUM%):
+if not defined DPICK goto :ask_dst
+call set "DST=%%DRV_!DPICK!%%"
+if "!DST!"=="" (
+    echo  [!] Noto'g'ri raqam. Qaytadan urining.
+    goto :ask_dst
 )
-
-set DCOUNT=0
-for %%P in (%DESTS%) do set /A DCOUNT+=1
-
-if %DCOUNT%==1 (
-    for %%P in (%DESTS%) do set "DST=%%~P"
-    echo [=] Zaxira joyi: !DST!\
-) else (
-    echo Bir nechta disk topildi:
-    set I=0
-    for %%P in (%DESTS%) do (
-        set /A I+=1
-        set "VN="
-        set "FS=0"
-        for /f "usebackq tokens=2 delims==" %%V in (`wmic logicaldisk where "DeviceID='%%~P'" get VolumeName /value 2^>nul ^| find "="`) do set "VN=%%V"
-        for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='%%~P'" get FreeSpace /value 2^>nul ^| find "="`) do set "FS=%%S"
-        set "FS_GB=?"
-        if defined FS (
-            if not "!FS!"=="" (
-                rem 32-bit mahdudiyatidan qochish uchun oxirgi 9 raqamni olib tashlab GB ga aylantiramiz
-                set "FS_SHORT=!FS:~0,-9!"
-                if "!FS_SHORT!"=="" set "FS_SHORT=0"
-                set "FS_GB=!FS_SHORT!"
-            )
-        )
-        echo    [!I!] %%~P   nom:"!VN!"   bo'sh: !FS_GB! GB
-    )
+rem Tasdiqlash
+echo.
+echo  [=] Siz tanlagan disk: !DST!
+call :print_disk "" "!DST!"
+echo.
+set "CONF="
+set /P CONF=  Bu disk fleshkami? (Y - ha, N - yo'q):
+if /I not "!CONF!"=="Y" (
     echo.
-    set /P DPICK=Disk raqamini tanlang:
-    set I=0
-    for %%P in (%DESTS%) do (
-        set /A I+=1
-        if "!I!"=="!DPICK!" set "DST=%%~P"
-    )
-    if "!DST!"=="" (
-        echo [!] Noto'g'ri tanlov.
-        pause
-        exit /b 1
-    )
-    echo [=] Zaxira joyi: !DST!\
+    echo  [i] Boshqa disk tanlang.
+    echo.
+    goto :ask_dst
 )
 echo.
 
 rem ============================================================
-rem  4) FOYDALANUVCHI PROFILINI TANLASH
+rem  4) MANBA (foydalanuvchi profili) TANLASH - QO'LDA
 rem ============================================================
+echo  ============================================================================
+echo    2-QADAM: FOYDALANUVCHI DISKI TANLASH (Windows disk)
+echo  ============================================================================
+echo.
+echo    Qaysi diskda sizning Windows va foydalanuvchi papkangiz joylashgan?
+echo    (odatda bu eng katta NTFS disk, lekin WinPE da harfi o'zgargan bo'lishi mumkin)
+echo.
+:ask_src_drive
+set "SPICK="
+set /P SPICK=  Disk raqamini kiriting (1-%DNUM%):
+if not defined SPICK goto :ask_src_drive
+call set "SYS_DRIVE=%%DRV_!SPICK!%%"
+if "!SYS_DRIVE!"=="" (
+    echo  [!] Noto'g'ri raqam. Qaytadan urining.
+    goto :ask_src_drive
+)
+if /I "!SYS_DRIVE!"=="!DST!" (
+    echo  [!] Manba va manzil bir xil bo'lishi mumkin emas!
+    goto :ask_src_drive
+)
+rem Users papkasi borligini tekshirish
+if not exist "!SYS_DRIVE!\Users\" (
+    echo  [!] Bu diskda \Users\ papkasi topilmadi.
+    echo      Boshqa disk tanlang.
+    echo.
+    goto :ask_src_drive
+)
+echo.
+echo  [=] Siz tanlagan disk: !SYS_DRIVE!   (Windows diski)
+echo.
+
+rem ============================================================
+rem  5) PROFIL TANLASH
+rem ============================================================
+echo  ============================================================================
+echo    3-QADAM: FOYDALANUVCHI PROFILI TANLASH
+echo  ============================================================================
+echo.
+
 set CANDIDATES=
-set SYS_DRIVE=
-for %%D in (%SOURCES%) do (
-    set "D=%%~D"
-    if /I not "!D!"=="!DST!" (
-        if exist "!D!\Windows\System32\" set "SYS_DRIVE=!D!"
-        for /D %%U in ("!D!\Users\*") do (
-            set "N=%%~nxU"
-            if /I not "!N!"=="Public" if /I not "!N!"=="Default" if /I not "!N!"=="Default User" if /I not "!N!"=="All Users" if /I not "!N!"=="defaultuser0" if /I not "!N!"=="WDAGUtilityAccount" (
-                if exist "%%U\Desktop" set CANDIDATES=!CANDIDATES! "%%U"
-            )
+set PNUM=0
+for /D %%U in ("!SYS_DRIVE!\Users\*") do (
+    set "N=%%~nxU"
+    if /I not "!N!"=="Public" if /I not "!N!"=="Default" if /I not "!N!"=="Default User" if /I not "!N!"=="All Users" if /I not "!N!"=="defaultuser0" if /I not "!N!"=="WDAGUtilityAccount" (
+        if exist "%%U\Desktop" (
+            set /A PNUM+=1
+            set "PROF_!PNUM!=%%U"
+            echo    [!PNUM!] %%U
         )
     )
 )
 
-if "%CANDIDATES%"=="" (
-    echo [!] Foydalanuvchi profili topilmadi.
-    echo     Qo'lda tekshiring:  dir C:\Users
+if %PNUM%==0 (
+    echo  [!] !SYS_DRIVE!\Users\ ichida haqiqiy profil topilmadi.
     pause
     exit /b 1
 )
 
-set COUNT=0
-for %%P in (%CANDIDATES%) do set /A COUNT+=1
-
-if %COUNT%==1 (
-    for %%P in (%CANDIDATES%) do set "SRC=%%~P"
-    echo [=] Profil topildi: !SRC!
+echo.
+if %PNUM%==1 (
+    call set "SRC=%%PROF_1%%"
+    echo  [=] Avtomatik tanlandi: !SRC!
 ) else (
-    echo Bir nechta profil topildi:
-    set I=0
-    for %%P in (%CANDIDATES%) do (
-        set /A I+=1
-        echo    [!I!] %%~P
-    )
-    echo.
-    set /P PICK=Profil raqamini tanlang:
-    set I=0
-    for %%P in (%CANDIDATES%) do (
-        set /A I+=1
-        if "!I!"=="!PICK!" set "SRC=%%~P"
-    )
+    :ask_prof
+    set "PPICK="
+    set /P PPICK=  Profil raqamini kiriting (1-%PNUM%):
+    if not defined PPICK goto :ask_prof
+    call set "SRC=%%PROF_!PPICK!%%"
     if "!SRC!"=="" (
-        echo [!] Noto'g'ri tanlov.
-        pause
-        exit /b 1
+        echo  [!] Noto'g'ri raqam.
+        goto :ask_prof
     )
-    echo [=] Profil: !SRC!
+    echo  [=] Siz tanlagan profil: !SRC!
 )
 echo.
-if defined SYS_DRIVE echo [i] Tizim diski: !SYS_DRIVE!
-echo.
+
+for %%N in ("!SRC!") do set "UNAME=%%~nxN"
 
 rem ============================================================
-rem  5) HAJMLARNI HISOBLASH VA JOY YETARLILIGINI TEKSHIRISH
+rem  6) HAJMLARNI HISOBLASH
 rem ============================================================
-echo [i] Profil hajmini hisoblash (bir necha soniya kutilsin)...
-set SRC_SIZE=0
-for /f "usebackq tokens=3" %%S in (`dir "!SRC!" /s /a-d 2^>nul ^| find "File(s)"`) do set SRC_SIZE=%%S
-set "SRC_SIZE_CLEAN=!SRC_SIZE:,=!"
-set SRC_GB=0
-if defined SRC_SIZE_CLEAN (
-    if not "!SRC_SIZE_CLEAN!"=="" (
-        set "SRC_SHORT=!SRC_SIZE_CLEAN:~0,-9!"
+echo  ============================================================================
+echo    4-QADAM: HAJMNI TEKSHIRISH
+echo  ============================================================================
+echo.
+echo  [*] Profil hajmini hisoblash (bir necha daqiqa kutilsin)...
+
+rem robocopy /L /E hisoblash - dir /s ba'zan nol beradi WinPE da
+set "SIZE_BYTES=0"
+for /f "tokens=3" %%S in ('robocopy "!SRC!" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ 2^>nul ^| find "Bytes :"') do (
+    if "%%S" NEQ "" set "SIZE_BYTES=%%S"
+)
+rem Agar robocopy ishlamasa - dir fallback
+if "!SIZE_BYTES!"=="0" (
+    for /f "tokens=3" %%S in ('dir "!SRC!" /s /a-d 2^>nul ^| find "File(s)"') do set "SIZE_BYTES=%%S"
+    set "SIZE_BYTES=!SIZE_BYTES:,=!"
+)
+
+set "SRC_GB=0"
+if defined SIZE_BYTES (
+    if not "!SIZE_BYTES!"=="" if not "!SIZE_BYTES!"=="0" (
+        set "SRC_SHORT=!SIZE_BYTES:~0,-9!"
         if "!SRC_SHORT!"=="" set "SRC_SHORT=0"
         set "SRC_GB=!SRC_SHORT!"
     )
 )
-echo [i] Profil hajmi:        taxminan !SRC_GB! GB
 
-set FREE=0
-for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do set "FREE=%%S"
-set FREE_GB=0
-if defined FREE (
-    if not "!FREE!"=="" (
-        set "FREE_SHORT=!FREE:~0,-9!"
+rem Fleshkada bo'sh joy
+set "FREE_BYTES=0"
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do set "FREE_BYTES=%%S"
+set "FREE_GB=0"
+if defined FREE_BYTES (
+    if not "!FREE_BYTES!"=="" if not "!FREE_BYTES!"=="0" (
+        set "FREE_SHORT=!FREE_BYTES:~0,-9!"
         if "!FREE_SHORT!"=="" set "FREE_SHORT=0"
         set "FREE_GB=!FREE_SHORT!"
     )
 )
-echo [i] Fleshkada bo'sh joy: !FREE_GB! GB
+
+echo.
+echo    Profil hajmi (!UNAME!):     ~!SRC_GB! GB
+echo    Fleshkada bo'sh joy (!DST!): !FREE_GB! GB
 echo.
 
 if !SRC_GB! GTR !FREE_GB! (
-    echo ============================================================
-    echo [!] DIQQAT: ma'lumotlar fleshkaga sig'maydi!
-    echo     Profil hajmi:        !SRC_GB! GB
-    echo     Fleshkada bo'sh joy: !FREE_GB! GB
-    echo     Kerak bo'ladi:       taxminan !SRC_GB! GB
-    echo ============================================================
-    set /P GOON=Baribir davom ettirilsinmi? (H/Y) [Y]:
-    if /I "!GOON!"=="Y" exit /b 1
-    if /I "!GOON!"=="N" exit /b 1
-    echo [i] Davom etmoqda - fleshka to'lgandan keyin xatolik beradi.
+    echo  ============================================================================
+    echo  [!] DIQQAT: ma'lumotlar fleshkaga sig'maydi!
+    echo      Yetishmaydi: taxminan !SRC_GB! GB kerak, !FREE_GB! GB bor.
+    echo  ============================================================================
+    echo.
+    set "GOON="
+    set /P GOON=  Baribir davom etilsinmi? (Y - ha, boshqa - yo'q):
+    if /I not "!GOON!"=="Y" (
+        echo  [i] Bekor qilindi.
+        pause
+        exit /b 1
+    )
+    echo  [i] Davom etmoqda - fleshka to'lgandan keyin xatolik beradi.
     echo.
 )
 
 rem ============================================================
-rem  6) VAQT MUHRI + ZAXIRA PAPKASI
+rem  7) YAKUNIY TASDIQLASH
+rem ============================================================
+echo  ============================================================================
+echo    5-QADAM: HAMMASI TAYYOR - BOSHLAYMIZMI?
+echo  ============================================================================
+echo.
+echo    Nimadan:  !SRC!            (~!SRC_GB! GB)
+echo    Qayerga:  !DST!\Backup_!UNAME!_*  (!FREE_GB! GB bo'sh)
+echo.
+echo    Nusxalanadi: Desktop, Documents, Pictures, Videos, Music,
+echo                 Downloads, AppData, brauzer xatcho'plari, Outlook,
+echo                 SSH kalitlari, RDP, shriftlar, stikerlar,
+echo                 Wi-Fi parollari, drayverlar, Windows kaliti va h.k.
+echo.
+set "START="
+set /P START=  Boshlanishi uchun Y bosing (yoki boshqa harf - bekor qilish):
+if /I not "!START!"=="Y" (
+    echo  [i] Bekor qilindi.
+    pause
+    exit /b 0
+)
+echo.
+
+rem ============================================================
+rem  8) ZAXIRA PAPKASI YARATISH
 rem ============================================================
 set "STAMP="
 for /f "usebackq delims=" %%i in (`wmic os get localdatetime /value 2^>nul ^| find "="`) do (
@@ -249,7 +308,6 @@ if defined DT (
     set "STAMP=_!RAW:~0,13!"
 )
 
-for %%N in ("!SRC!") do set "UNAME=%%~nxN"
 set "BACKUP=!DST!\Backup_%UNAME%%STAMP%"
 mkdir "%BACKUP%" 2>nul
 mkdir "%BACKUP%\_SystemInfo" 2>nul
@@ -257,14 +315,14 @@ set "LOG=%BACKUP%\_backup.log"
 set "SUMMARY=%BACKUP%\_summary.txt"
 set "REPORT=%BACKUP%\report.html"
 
-echo [=] Zaxira papkasi: %BACKUP%
-echo [=] Log fayli:      %LOG%
-echo [=] HTML hisobot:   %REPORT%
+echo  ============================================================================
+echo    NUSXALASH BOSHLANDI
+echo  ============================================================================
+echo    Papka: %BACKUP%
+echo    Log:   %LOG%
+echo  ============================================================================
 echo.
-echo Nusxalash boshlanmoqda. Fayl nomlari va foiz ekranda ko'rinadi.
-echo To'xtatish uchun Ctrl+C bosing.
-echo.
-timeout /t 3 >nul
+timeout /t 2 >nul
 
 > "%SUMMARY%" echo WinPE Backup Summary
 >> "%SUMMARY%" echo ====================
@@ -274,7 +332,7 @@ timeout /t 3 >nul
 >> "%SUMMARY%" echo.
 
 rem ============================================================
-rem  7) ASOSIY PAPKALARNI NUSXALASH
+rem  9) ASOSIY PAPKALARNI NUSXALASH
 rem ============================================================
 call :sect Desktop         "!SRC!\Desktop"
 call :sect Documents       "!SRC!\Documents"
@@ -288,7 +346,7 @@ call :roaming              "!SRC!\AppData\Roaming"
 call :local                "!SRC!\AppData\Local"
 
 rem ============================================================
-rem  8) QO'SHIMCHA FAYLLAR
+rem 10) QO'SHIMCHA FAYLLAR
 rem ============================================================
 call :bookmark "!SRC!\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" "Chrome_Bookmarks"
 call :bookmark "!SRC!\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" "Edge_Bookmarks"
@@ -304,12 +362,12 @@ call :scheduled_tasks
 call :user_certs
 
 rem ============================================================
-rem  9) TIZIM MA'LUMOTLARI
+rem 11) TIZIM MA'LUMOTLARI
 rem ============================================================
 call :collect_sysinfo
 
 rem ============================================================
-rem 10) HTML HISOBOT
+rem 12) HTML HISOBOT
 rem ============================================================
 call :make_html_report
 
@@ -317,18 +375,80 @@ call :make_html_report
 >> "%SUMMARY%" echo Tugadi:    %DATE% %TIME%
 
 echo.
-echo ============================================================
-echo    TUGADI
+echo  ============================================================================
+echo    TAYYOR! Zaxiralash muvaffaqiyatli yakunlandi
+echo  ============================================================================
 echo    Papka:    %BACKUP%
 echo    Log:      %LOG%
 echo    Hisobot:  %REPORT%
-echo ============================================================
+echo  ============================================================================
+echo.
+echo    Fleshkani xavfsiz chiqarib olishni unutmang!
 echo.
 pause
 exit /b 0
 
+rem ===========================================================================
+rem                        YORDAMCHI FUNKSIYALAR
+rem ===========================================================================
+
+:print_disk
+rem %1 = raqam (bo'sh bo'lishi mumkin), %2 = disk harfi (masalan "D:")
+set "PD_NUM=%~1"
+set "PD_LET=%~2"
+set "PD_VN="
+set "PD_FS="
+set "PD_SIZE="
+set "PD_TYPE="
+for /f "usebackq tokens=2 delims==" %%V in (`wmic logicaldisk where "DeviceID='%PD_LET%'" get VolumeName /value 2^>nul ^| find "="`) do set "PD_VN=%%V"
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='%PD_LET%'" get FreeSpace /value 2^>nul ^| find "="`) do set "PD_FS=%%S"
+for /f "usebackq tokens=2 delims==" %%Z in (`wmic logicaldisk where "DeviceID='%PD_LET%'" get Size /value 2^>nul ^| find "="`) do set "PD_SIZE=%%Z"
+for /f "usebackq tokens=2 delims==" %%T in (`wmic logicaldisk where "DeviceID='%PD_LET%'" get DriveType /value 2^>nul ^| find "="`) do set "PD_TYPE=%%T"
+
+rem GB ga aylantirish (oxirgi 9 raqamni olib tashlab)
+set "PD_FS_GB=?"
+if defined PD_FS (
+    if not "%PD_FS%"=="" (
+        set "T=%PD_FS:~0,-9%"
+        if "!T!"=="" set "T=0"
+        set "PD_FS_GB=!T!"
+    )
+)
+set "PD_SIZE_GB=?"
+if defined PD_SIZE (
+    if not "%PD_SIZE%"=="" (
+        set "T=%PD_SIZE:~0,-9%"
+        if "!T!"=="" set "T=0"
+        set "PD_SIZE_GB=!T!"
+    )
+)
+
+rem Tipni so'z bilan ko'rsatish
+set "PD_TYPE_NAME=?"
+if "%PD_TYPE%"=="2" set "PD_TYPE_NAME=Fleshka (Sменный)"
+if "%PD_TYPE%"=="3" set "PD_TYPE_NAME=Qattiq disk"
+if "%PD_TYPE%"=="4" set "PD_TYPE_NAME=Tarmoq diski"
+if "%PD_TYPE%"=="5" set "PD_TYPE_NAME=CD/DVD"
+if "%PD_TYPE%"=="6" set "PD_TYPE_NAME=RAM disk"
+
+rem Metka
+if not defined PD_VN set "PD_VN=<nomsiz>"
+if "%PD_VN%"=="" set "PD_VN=<nomsiz>"
+
+rem Raqamni formatlab chiqarish
+set "NUM_STR=   "
+if defined PD_NUM if not "%PD_NUM%"=="" set "NUM_STR=[%PD_NUM%]"
+
+rem WinPE X: diski uchun maxsus
+if /I "%PD_LET%"=="X:" (
+    echo    !NUM_STR! %PD_LET%    !PD_SIZE_GB! GB     !PD_FS_GB! GB     WinPE ichki        -
+) else (
+    echo    !NUM_STR! %PD_LET%    !PD_SIZE_GB! GB     !PD_FS_GB! GB     !PD_TYPE_NAME!    !PD_VN!
+)
+exit /b 0
+
 rem ---------------------------------------------------------------------------
-rem                              NUSXALASH FUNKSIYALARI
+rem                        NUSXALASH FUNKSIYALARI
 rem ---------------------------------------------------------------------------
 
 :sect
@@ -339,7 +459,7 @@ if not exist "%SPATH%" (
     exit /b 0
 )
 echo.
-echo ================= %SNAME% =================
+echo  ================= %SNAME% =================
 robocopy "%SPATH%" "%BACKUP%\%SNAME%" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock"
 >> "%SUMMARY%" echo [ok]   %SNAME% - rc=!errorlevel!
 exit /b 0
@@ -351,7 +471,7 @@ if not exist "%SPATH%" (
     exit /b 0
 )
 echo.
-echo ================= Downloads (installerlardan tashqari) =================
+echo  ================= Downloads (installerlardan tashqari) =================
 robocopy "%SPATH%" "%BACKUP%\Downloads" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm"
 >> "%SUMMARY%" echo [ok]   Downloads - rc=!errorlevel!
 exit /b 0
@@ -363,7 +483,7 @@ if not exist "%SPATH%" (
     exit /b 0
 )
 echo.
-echo ================= AppData\Roaming =================
+echo  ================= AppData\Roaming =================
 robocopy "%SPATH%" "%BACKUP%\AppData_Roaming" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
 >> "%SUMMARY%" echo [ok]   AppData\Roaming - rc=!errorlevel!
 exit /b 0
@@ -375,7 +495,7 @@ if not exist "%SPATH%" (
     exit /b 0
 )
 echo.
-echo ================= AppData\Local =================
+echo  ================= AppData\Local =================
 robocopy "%SPATH%" "%BACKUP%\AppData_Local" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
 >> "%SUMMARY%" echo [ok]   AppData\Local - rc=!errorlevel!
 exit /b 0
@@ -385,7 +505,7 @@ set "BPATH=%~1"
 set "BNAME=%~2"
 if not exist "%BPATH%" exit /b 0
 echo.
-echo ================= Xatcho'plar: %BNAME% =================
+echo  ================= Xatcho'plar: %BNAME% =================
 mkdir "%BACKUP%\_Bookmarks" 2>nul
 if exist "%BPATH%\*" (
     robocopy "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" /E /R:1 /W:1 /XJ /NFL /NDL /NP /TEE /LOG+:"%LOG%"
@@ -398,7 +518,7 @@ exit /b 0
 
 :outlook_data
 echo.
-echo ================= Outlook (.pst / .ost) =================
+echo  ================= Outlook (.pst / .ost) =================
 mkdir "%BACKUP%\_Outlook" 2>nul
 set FOUND=0
 for %%P in (
@@ -420,7 +540,7 @@ exit /b 0
 
 :rdp_files
 echo.
-echo ================= RDP ulanishlari =================
+echo  ================= RDP ulanishlari =================
 mkdir "%BACKUP%\_RDP" 2>nul
 set FOUND=0
 if exist "!SRC!\Documents\*.rdp" (
@@ -444,7 +564,7 @@ exit /b 0
 
 :ssh_keys
 echo.
-echo ================= SSH kalitlari =================
+echo  ================= SSH kalitlari =================
 if exist "!SRC!\.ssh" (
     robocopy "!SRC!\.ssh" "%BACKUP%\_SSH" /E /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
     >> "%SUMMARY%" echo [ok]   .ssh kalitlari
@@ -466,7 +586,7 @@ exit /b 0
 
 :user_fonts
 echo.
-echo ================= Foydalanuvchi shriftlari =================
+echo  ================= Foydalanuvchi shriftlari =================
 set "FDIR=!SRC!\AppData\Local\Microsoft\Windows\Fonts"
 if exist "!FDIR!" (
     robocopy "!FDIR!" "%BACKUP%\_UserFonts" /E /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
@@ -478,7 +598,7 @@ exit /b 0
 
 :sticky_notes
 echo.
-echo ================= Sticky Notes (stikerlar) =================
+echo  ================= Sticky Notes (stikerlar) =================
 set FOUND=0
 for /D %%P in ("!SRC!\AppData\Local\Packages\Microsoft.MicrosoftStickyNotes_*") do (
     if exist "%%P\LocalState" (
@@ -499,7 +619,7 @@ exit /b 0
 
 :hosts_file
 echo.
-echo ================= hosts fayli =================
+echo  ================= hosts fayli =================
 if defined SYS_DRIVE (
     set "HOSTS=!SYS_DRIVE!\Windows\System32\drivers\etc\hosts"
     if exist "!HOSTS!" (
@@ -511,7 +631,7 @@ exit /b 0
 
 :scheduled_tasks
 echo.
-echo ================= Rejalashtiruvchi vazifalari =================
+echo  ================= Rejalashtiruvchi vazifalari =================
 mkdir "%BACKUP%\_SystemInfo\ScheduledTasks" 2>nul
 where schtasks >nul 2>&1
 if not errorlevel 1 (
@@ -535,7 +655,7 @@ exit /b 0
 
 :user_certs
 echo.
-echo ================= Sertifikatlar =================
+echo  ================= Sertifikatlar =================
 mkdir "%BACKUP%\_SystemInfo\Certs" 2>nul
 where certutil >nul 2>&1
 if not errorlevel 1 (
@@ -554,10 +674,9 @@ rem ---------------------------------------------------------------------------
 
 :collect_sysinfo
 echo.
-echo ================= Tizim ma'lumotlarini yig'ish =================
+echo  ================= Tizim ma'lumotlarini yig'ish =================
 set "SI=%BACKUP%\_SystemInfo"
 
-rem --- O'rnatilgan dasturlar ---
 set "APPS_TXT=%SI%\installed_programs.txt"
 > "%APPS_TXT%" echo O'rnatilgan dasturlar (registrydan)
 >> "%APPS_TXT%" echo ====================================
@@ -592,7 +711,6 @@ if defined SYS_DRIVE (
 )
 >> "%SUMMARY%" echo [ok]   o'rnatilgan dasturlar
 
-rem --- Wi-Fi profillari ---
 set "WIFI_DIR=%SI%\WiFi"
 mkdir "%WIFI_DIR%" 2>nul
 
@@ -630,7 +748,6 @@ if not errorlevel 1 (
 )
 >> "%SUMMARY%" echo [ok]   Wi-Fi profillari
 
-rem --- Windows kaliti ---
 set "KEY_TXT=%SI%\windows_product_key.txt"
 > "%KEY_TXT%" echo Windows Product Key
 >> "%KEY_TXT%" echo ===================
@@ -652,7 +769,6 @@ if defined SYS_DRIVE (
 )
 >> "%SUMMARY%" echo [ok]   Windows kaliti
 
-rem --- Drayverlar ---
 if defined SYS_DRIVE (
     where dism >nul 2>&1
     if not errorlevel 1 (
@@ -666,7 +782,6 @@ if defined SYS_DRIVE (
     )
 )
 
-rem --- Qurilma ma'lumotlari ---
 set "HW=%SI%\hardware.txt"
 > "%HW%" echo Qurilma ma'lumotlari
 >> "%HW%" echo =====================
@@ -693,7 +808,7 @@ rem ---------------------------------------------------------------------------
 
 :make_html_report
 echo.
-echo ================= HTML hisobotini yaratish =================
+echo  ================= HTML hisobotini yaratish =================
 set "TMP_STATS=%BACKUP%\_stats.tmp"
 > "%TMP_STATS%" echo.
 
@@ -780,7 +895,7 @@ for /D %%D in ("%BACKUP%\*") do (
 )
 >> "%REPORT%" echo ^</table^>
 
->> "%REPORT%" echo ^<div class="footer"^>winpe-backup.cmd tomonidan yaratilgan - %DATE% %TIME%^</div^>
+>> "%REPORT%" echo ^<div class="footer"^>b.cmd tomonidan yaratilgan - %DATE% %TIME%^</div^>
 >> "%REPORT%" echo ^</div^>^</body^>^</html^>
 
 del "%TMP_STATS%" 2>nul
