@@ -374,8 +374,6 @@ call :ssh_keys
 call :user_fonts
 call :sticky_notes
 call :hosts_file
-call :scheduled_tasks
-call :user_certs
 call :collect_sysinfo
 call :make_html_report
 
@@ -595,30 +593,6 @@ if defined SYS_DRIVE (
         copy /Y "!HOSTS!" "%BACKUP%\_SystemInfo\hosts" >nul 2>&1
         >> "%SUMMARY%" echo [ok]   hosts
     )
-)
-exit /b 0
-
-:scheduled_tasks
-echo.
-echo  ================= Scheduled tasks =================
-mkdir "%BACKUP%\_SystemInfo\ScheduledTasks" 2>nul
-where schtasks >nul 2>&1
-if not errorlevel 1 (
-    schtasks /query /fo CSV /v > "%BACKUP%\_SystemInfo\ScheduledTasks\tasks_list.csv" 2>nul
-    >> "%SUMMARY%" echo [ok]   vazifalar
-)
-exit /b 0
-
-:user_certs
-echo.
-echo  ================= Sertifikatlar =================
-mkdir "%BACKUP%\_SystemInfo\Certs" 2>nul
-where certutil >nul 2>&1
-if not errorlevel 1 (
-    certutil -store -user my > "%BACKUP%\_SystemInfo\Certs\user_personal.txt" 2>nul
-    certutil -store -user root > "%BACKUP%\_SystemInfo\Certs\user_trusted_root.txt" 2>nul
-    certutil -store -user ca > "%BACKUP%\_SystemInfo\Certs\user_intermediate.txt" 2>nul
-    >> "%SUMMARY%" echo [ok]   sertifikatlar
 )
 exit /b 0
 
