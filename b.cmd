@@ -220,7 +220,7 @@ set "SIZE_BYTES=0"
 
 rem Usul 1: robocopy /L - til mustaqil: yakuniy jadvalning 3-qatori (Dirs, Files, Bytes)
 set RC_ROW=0
-for /f "tokens=1* delims=:" %%A in ('robocopy "!SRC!" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 2^>nul ^| findstr /C:" : " ^| findstr /V /R /C:"^[0-9]"') do (
+for /f "tokens=1* delims=:" %%A in ('robocopy "!SRC!" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 2^>nul ^| find " : "') do (
     set /A RC_ROW+=1
     if !RC_ROW!==3 for /f "tokens=1" %%N in ("%%B") do set "SIZE_BYTES=%%N"
 )
@@ -344,7 +344,6 @@ echo  ==========================================================================
 echo    Papka: %BACKUP%
 echo  ============================================================================
 echo.
-timeout /t 2 >nul
 
 > "%SUMMARY%" echo WinPE Backup Summary
 >> "%SUMMARY%" echo ====================
@@ -352,6 +351,13 @@ timeout /t 2 >nul
 >> "%SUMMARY%" echo Zaxira:    %BACKUP%
 >> "%SUMMARY%" echo Boshlandi: %DATE% %TIME%
 >> "%SUMMARY%" echo.
+
+rem Ekranda faqat fayl nomlari: foiz, "Yangi fayl", hajm va robocopy sarlavhalarisiz
+set "RCF=/E /R:0 /W:0 /MT:16 /XJ /NDL /NC /NS /NP /NJH /NJS /TEE /LOG+:"%LOG%""
+set STEP=0
+set TOTAL=12
+set "DISK_FULL="
+set "FULL_WARNED="
 
 call :sect Desktop         "!SRC!\Desktop"
 call :sect Documents       "!SRC!\Documents"
@@ -364,6 +370,7 @@ call :downloads            "!SRC!\Downloads"
 call :roaming              "!SRC!\AppData\Roaming"
 call :local                "!SRC!\AppData\Local"
 
+call :header "Qo'shimcha: xatcho'plar, Outlook, SSH, RDP, shriftlar" "!SRC!"
 call :bookmark "!SRC!\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" "Chrome_Bookmarks"
 call :bookmark "!SRC!\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" "Edge_Bookmarks"
 call :bookmark "!SRC!\AppData\Roaming\Mozilla\Firefox\Profiles" "Firefox_Profiles"
@@ -374,15 +381,21 @@ call :ssh_keys
 call :user_fonts
 call :sticky_notes
 call :hosts_file
+call :header "Tizim ma'lumotlari va hisobot" "%BACKUP%\_SystemInfo"
 call :collect_sysinfo
 call :make_html_report
 
 >> "%SUMMARY%" echo.
 >> "%SUMMARY%" echo Tugadi: %DATE% %TIME%
 
+title TAYYOR - WinPE Backup
 echo.
 echo  ============================================================================
 echo    TAYYOR!
+echo  ============================================================================
+echo.
+type "%SUMMARY%"
+echo.
 echo  ============================================================================
 echo    Papka:   %BACKUP%
 echo    Hisobot: %REPORT%
@@ -455,53 +468,89 @@ rem ===========================================================================
 rem                        NUSXALASH FUNKSIYALARI
 rem ===========================================================================
 
+:header
+set /A STEP+=1
+title [!STEP!/%TOTAL%] %~1 - WinPE Backup
+echo.
+echo  ============================================================================
+echo    [!STEP!/%TOTAL%] %~1
+echo    %~2
+echo  ============================================================================
+exit /b 0
+
+:can_copy
+if not exist "%~2" (
+    echo    [i] Papka yo'q - o'tkazib yuborildi.
+    >> "%SUMMARY%" echo [skip] %~1
+    exit /b 1
+)
+if defined DISK_FULL (
+    echo    [W] Fleshkada joy yo'q - o'tkazib yuborildi.
+    >> "%SUMMARY%" echo [skip] %~1 - joy yo'q
+    exit /b 1
+)
+exit /b 0
+
+:result
+set "RN=%~1"
+set "RRC=%~2"
+call :check_space
+if %RRC% GEQ 8 (
+    echo    [W] %RN%: xatolar bor, kod %RRC% - _backup.log faylini ko'ring.
+    >> "%SUMMARY%" echo [xato] %RN% - kod %RRC%
+) else (
+    echo    [OK] %RN% nusxalandi.
+    >> "%SUMMARY%" echo [ok]   %RN%
+)
+if defined DISK_FULL if not defined FULL_WARNED (
+    set FULL_WARNED=1
+    echo.
+    echo  ============================================================================
+    echo    [W] FLESHKADA JOY TUGADI
+    echo        Qolgan papkalar o'tkazib yuboriladi.
+    echo  ============================================================================
+)
+exit /b 0
+
+:check_space
+rem 100 MB dan kam qolsa (9 raqamdan qisqa son) - fleshka to'lgan deb hisoblaymiz
+set "CS_FREE="
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%S") do set "CS_FREE=%%x"
+if not defined CS_FREE exit /b 0
+if "!CS_FREE:~8,1!"=="" set "DISK_FULL=1"
+exit /b 0
+
 :sect
 set "SNAME=%~1"
 set "SPATH=%~2"
-if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] %SNAME%
-    exit /b 0
-)
-echo.
-echo  ================= %SNAME% =================
-robocopy "%SPATH%" "%BACKUP%\%SNAME%" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock"
->> "%SUMMARY%" echo [ok]   %SNAME%
+call :header "%SNAME%" "%SPATH%"
+call :can_copy "%SNAME%" "%SPATH%" || exit /b 0
+robocopy "%SPATH%" "%BACKUP%\%SNAME%" %RCF% /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock"
+call :result "%SNAME%" %ERRORLEVEL%
 exit /b 0
 
 :downloads
 set "SPATH=%~1"
-if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] Downloads
-    exit /b 0
-)
-echo.
-echo  ================= Downloads =================
-robocopy "%SPATH%" "%BACKUP%\Downloads" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm"
->> "%SUMMARY%" echo [ok]   Downloads
+call :header "Downloads - o'rnatuvchi fayllarsiz" "%SPATH%"
+call :can_copy "Downloads" "%SPATH%" || exit /b 0
+robocopy "%SPATH%" "%BACKUP%\Downloads" %RCF% /XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm"
+call :result "Downloads" %ERRORLEVEL%
 exit /b 0
 
 :roaming
 set "SPATH=%~1"
-if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] AppData\Roaming
-    exit /b 0
-)
-echo.
-echo  ================= AppData\Roaming =================
-robocopy "%SPATH%" "%BACKUP%\AppData_Roaming" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
->> "%SUMMARY%" echo [ok]   AppData\Roaming
+call :header "AppData\Roaming - dastur sozlamalari" "%SPATH%"
+call :can_copy "AppData\Roaming" "%SPATH%" || exit /b 0
+robocopy "%SPATH%" "%BACKUP%\AppData_Roaming" %RCF% /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
+call :result "AppData\Roaming" %ERRORLEVEL%
 exit /b 0
 
 :local
 set "SPATH=%~1"
-if not exist "%SPATH%" (
-    >> "%SUMMARY%" echo [skip] AppData\Local
-    exit /b 0
-)
-echo.
-echo  ================= AppData\Local =================
-robocopy "%SPATH%" "%BACKUP%\AppData_Local" /E /R:1 /W:1 /MT:16 /XJ /TEE /LOG+:"%LOG%" /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
->> "%SUMMARY%" echo [ok]   AppData\Local
+call :header "AppData\Local - dastur ma'lumotlari" "%SPATH%"
+call :can_copy "AppData\Local" "%SPATH%" || exit /b 0
+robocopy "%SPATH%" "%BACKUP%\AppData_Local" %RCF% /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
+call :result "AppData\Local" %ERRORLEVEL%
 exit /b 0
 
 :bookmark
@@ -509,10 +558,10 @@ set "BPATH=%~1"
 set "BNAME=%~2"
 if not exist "%BPATH%" exit /b 0
 echo.
-echo  ================= %BNAME% =================
+echo    - %BNAME%
 mkdir "%BACKUP%\_Bookmarks" 2>nul
 if exist "%BPATH%\*" (
-    robocopy "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" /E /R:1 /W:1 /XJ /NFL /NDL /NP /TEE /LOG+:"%LOG%"
+    robocopy "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" /E /R:1 /W:1 /XJ /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
 ) else (
     copy /Y "%BPATH%" "%BACKUP%\_Bookmarks\%BNAME%" >nul 2>&1
 )
@@ -521,12 +570,12 @@ exit /b 0
 
 :outlook_data
 echo.
-echo  ================= Outlook =================
+echo    - Outlook
 mkdir "%BACKUP%\_Outlook" 2>nul
 set FOUND=0
 for %%P in ("!SRC!\Documents\Outlook Files" "!SRC!\AppData\Local\Microsoft\Outlook" "!SRC!\AppData\Roaming\Microsoft\Outlook") do (
     if exist %%P (
-        robocopy %%P "%BACKUP%\_Outlook" *.pst *.ost *.nst /S /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
+        robocopy %%P "%BACKUP%\_Outlook" *.pst *.ost *.nst /S /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
         set FOUND=1
     )
 )
@@ -535,7 +584,7 @@ exit /b 0
 
 :rdp_files
 echo.
-echo  ================= RDP =================
+echo    - RDP
 mkdir "%BACKUP%\_RDP" 2>nul
 if exist "!SRC!\Documents\*.rdp" copy /Y "!SRC!\Documents\*.rdp" "%BACKUP%\_RDP\" >nul 2>&1
 if exist "!SRC!\AppData\Local\Microsoft\Remote Desktop" robocopy "!SRC!\AppData\Local\Microsoft\Remote Desktop" "%BACKUP%\_RDP\RD_App" /E /R:1 /W:1 /NFL /NDL /NP >nul
@@ -544,9 +593,9 @@ exit /b 0
 
 :ssh_keys
 echo.
-echo  ================= SSH =================
+echo    - SSH
 if exist "!SRC!\.ssh" (
-    robocopy "!SRC!\.ssh" "%BACKUP%\_SSH" /E /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
+    robocopy "!SRC!\.ssh" "%BACKUP%\_SSH" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
     >> "%SUMMARY%" echo [ok]   .ssh
 ) else (
     >> "%SUMMARY%" echo [skip] .ssh
@@ -565,9 +614,9 @@ exit /b 0
 
 :user_fonts
 echo.
-echo  ================= Shriftlar =================
+echo    - Shriftlar
 if exist "!SRC!\AppData\Local\Microsoft\Windows\Fonts" (
-    robocopy "!SRC!\AppData\Local\Microsoft\Windows\Fonts" "%BACKUP%\_UserFonts" /E /R:1 /W:1 /NFL /NDL /NP /TEE /LOG+:"%LOG%"
+    robocopy "!SRC!\AppData\Local\Microsoft\Windows\Fonts" "%BACKUP%\_UserFonts" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /LOG+:"%LOG%"
     >> "%SUMMARY%" echo [ok]   shriftlar
 ) else (
     >> "%SUMMARY%" echo [skip] shriftlar
@@ -576,7 +625,7 @@ exit /b 0
 
 :sticky_notes
 echo.
-echo  ================= Sticky Notes =================
+echo    - Sticky Notes
 for /D %%P in ("!SRC!\AppData\Local\Packages\Microsoft.MicrosoftStickyNotes_*") do (
     if exist "%%P\LocalState" robocopy "%%P\LocalState" "%BACKUP%\_StickyNotes\Modern" /E /R:1 /W:1 /NFL /NDL /NP >nul
 )
@@ -586,7 +635,7 @@ exit /b 0
 
 :hosts_file
 echo.
-echo  ================= hosts =================
+echo    - hosts
 if defined SYS_DRIVE (
     set "HOSTS=!SYS_DRIVE!\Windows\System32\drivers\etc\hosts"
     if exist "!HOSTS!" (
@@ -598,7 +647,7 @@ exit /b 0
 
 :collect_sysinfo
 echo.
-echo  ================= Tizim ma'lumotlari =================
+echo    - O'rnatilgan dasturlar, Wi-Fi, Windows kaliti
 set "SI=%BACKUP%\_SystemInfo"
 
 set "APPS_TXT=%SI%\installed_programs.txt"
@@ -648,14 +697,6 @@ for /f "usebackq tokens=2 delims==" %%K in (`wmic path softwarelicensingservice 
 )
 >> "%SUMMARY%" echo [ok]   Windows kaliti
 
-if defined SYS_DRIVE (
-    where dism >nul 2>&1
-    if not errorlevel 1 (
-        mkdir "%SI%\Drivers" 2>nul
-        dism /image:!SYS_DRIVE!\ /export-driver /destination:"%SI%\Drivers" >nul 2>&1
-    )
-)
->> "%SUMMARY%" echo [ok]   drayverlar
 
 set "HW=%SI%\hardware.txt"
 > "%HW%" echo Hardware
@@ -675,7 +716,7 @@ exit /b 0
 
 :make_html_report
 echo.
-echo  ================= HTML hisobot =================
+echo    - HTML hisobot
 set "TMP_STATS=%BACKUP%\_stats.tmp"
 > "%TMP_STATS%" echo.
 

@@ -1,0 +1,2 @@
+# cmd faylini CRLF bilan saqlash: LF bilan cmd "goto"/"call :label" ni ba'zan topa olmaydi
+*.cmd -text
