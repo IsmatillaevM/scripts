@@ -1,60 +1,62 @@
 # WinPE Backup
 
-Автономный скрипт для резервного копирования пользовательского профиля Windows из WinPE (или из обычной Windows). Один `.cmd` файл, никаких зависимостей, работает в среде восстановления даже когда Windows не грузится.
+**O'zbekcha** | [Русский](README.ru.md)
 
-Все сообщения на **узбекском (латиница)** — в WinPE часто нет шрифта с кириллицей.
+Windows foydalanuvchi profilini WinPE dan (yoki oddiy Windows dan) zaxiralash uchun mustaqil skript. Bitta `.cmd` fayl, hech qanday qo'shimcha dastur kerak emas, Windows yuklanmay qolganda ham tiklash muhitida ishlaydi.
 
-Файл называется `b.cmd` — короткое имя, чтобы быстро набирать в консоли.
+Barcha xabarlar **o'zbek tilida (lotin)** — WinPE da ko'pincha kirill shrifti bo'lmaydi.
 
----
-
-## Содержание
-
-- [Как запустить](#как-запустить)
-- [Что копируется](#что-копируется)
-- [Что НЕ копируется](#что-не-копируется)
-- [Результат](#результат)
-- [Требования и ограничения](#требования-и-ограничения)
+Fayl nomi `b.cmd` — konsolda tez yozish uchun qisqa nom.
 
 ---
 
-## Как запустить
+## Mundarija
 
-### Шаг 1. Подготовка флешки
+- [Qanday ishga tushiriladi](#qanday-ishga-tushiriladi)
+- [Nimalar nusxalanadi](#nimalar-nusxalanadi)
+- [Nimalar nusxalanMAYDI](#nimalar-nusxalanmaydi)
+- [Natija](#natija)
+- [Talablar va cheklovlar](#talablar-va-cheklovlar)
 
-Положи файл `b.cmd` в **корень** USB-флешки (не в папку).
+---
 
-### Шаг 2. Зайти в среду восстановления (WinPE)
+## Qanday ishga tushiriladi
 
-#### Способ A — через меню «Пуск» (если Windows грузится)
+### 1-qadam. Fleshkani tayyorlash
 
-1. Нажми и держи **Shift**, затем кликни **Пуск → Питание → Перезагрузка**
-2. Компьютер перезагрузится в меню **Выбор действия**
-3. Иди: **Поиск и устранение неисправностей → Дополнительные параметры → Командная строка**
-4. Выбери свою учётную запись и введи пароль
-5. Откроется чёрное окно командной строки — ты в WinPE
+`b.cmd` faylini USB-fleshkaning **ildiziga** qo'ying (papka ichiga emas).
 
-#### Способ B — через загрузочную WinPE-флешку (если Windows не грузится)
+### 2-qadam. Tiklash muhitiga (WinPE) kirish
 
-1. Запиши WinPE-образ на другую флешку (через **Rufus**, **Ventoy** или **Win10XPE**)
-2. Загрузись с этой флешки (в BIOS выбери её как Boot Device)
-3. Когда откроется WinPE, нажми **Shift + F10** — появится командная строка
+#### A usul — «Пуск» menyusi orqali (Windows yuklansa)
 
-### Шаг 3. Узнать букву флешки через `diskpart`
+1. **Shift** tugmasini bosib turing va **Пуск → Питание → Перезагрузка** ni bosing (inglizcha: Start → Power → Restart)
+2. Kompyuter **Выбор действия** (Choose an option) menyusiga qayta yuklanadi
+3. **Поиск и устранение неисправностей → Дополнительные параметры → Командная строка** ga kiring (Troubleshoot → Advanced options → Command Prompt)
+4. Hisobingizni tanlang va parolni kiriting
+5. Qora buyruqlar oynasi ochiladi — siz WinPE dasiz
 
-В WinPE буква твоей флешки может отличаться от того, что было в обычной Windows (может быть `D:`, `E:`, `F:` — зависит от компьютера). Чтобы её узнать, выполни:
+#### B usul — yuklanuvchi WinPE fleshkasi orqali (Windows yuklanmasa)
+
+1. WinPE obrazini boshqa fleshkaga yozing (**Rufus**, **Ventoy** yoki **Win10XPE** yordamida)
+2. Shu fleshkadan yuklaning (BIOS da uni Boot Device sifatida tanlang)
+3. WinPE ochilganda **Shift + F10** ni bosing — buyruqlar oynasi chiqadi
+
+### 3-qadam. `diskpart` orqali fleshka harfini aniqlash
+
+WinPE da fleshkangizning harfi oddiy Windows dagidan farq qilishi mumkin (`D:`, `E:`, `F:` — kompyuterga bog'liq). Uni bilish uchun quyidagini bajaring:
 
 ```cmd
 diskpart
 ```
 
-Откроется приглашение `DISKPART>`. Введи:
+`DISKPART>` taklifi ochiladi. Kiriting:
 
 ```cmd
 list volume
 ```
 
-Увидишь таблицу вроде:
+Shunga o'xshash jadvalni ko'rasiz:
 
 ```
   Том ###  Имя  Метка         ФС      Тип        Размер    Состояние  Св
@@ -65,39 +67,39 @@ list volume
   Том 3    D    MY_USB        FAT32   Сменный    14 Гб     Исправен
 ```
 
-Найди строку с типом **Сменный** (`Removable`) и размером твоей флешки — это она. В примере выше буква — `D`.
+Turi **Сменный** (`Removable`) bo'lgan va hajmi fleshkangizga mos qatorni toping — bu o'sha fleshka. Yuqoridagi misolda harf — `D`.
 
-Выйди из diskpart:
+diskpart dan chiqing:
 
 ```cmd
 exit
 ```
 
-### Шаг 4. Запустить скрипт
+### 4-qadam. Skriptni ishga tushirish
 
-Введи букву флешки + `\b`. Для примера выше:
+Fleshka harfi + `\b` ni kiriting. Yuqoridagi misol uchun:
 
 ```cmd
 D:\b
 ```
 
-Расширение `.cmd` можно не писать — Windows сама его подставит.
+`.cmd` kengaytmasini yozish shart emas — Windows uni o'zi qo'shadi.
 
-### Шаг 5. Ответить на вопросы скрипта
+### 5-qadam. Skript savollariga javob berish
 
-Скрипт покажет таблицу всех дисков с номерами, размером и меткой, а потом спросит:
+Skript barcha disklar jadvalini (raqami, hajmi va metkasi bilan) ko'rsatadi, so'ng so'raydi:
 
-1. **Номер флешки** — куда сохранять бэкап. Попросит подтвердить: `Y`.
-2. **Номер диска с Windows** — откуда копировать (обычно `C:`). Диск должен содержать папку `\Users\`.
-3. **Профиль пользователя** — если профиль один, выберется автоматически.
-4. Покажет **таблицу папок с размером каждой** (без установщиков и временных файлов — ровно то, что будет скопировано), общий объём и **свободное место** на флешке. Если не влезает — предупредит и спросит, продолжать ли.
-5. **Начать?** — нажми `Y`, и пойдёт копирование.
+1. **Fleshka raqami** — zaxira qayerga saqlanadi. Tasdiqlashni so'raydi: `Y`.
+2. **Windows diski raqami** — qayerdan nusxalanadi (odatda `C:`). Diskda `\Users\` papkasi bo'lishi kerak.
+3. **Foydalanuvchi profili** — agar profil bitta bo'lsa, avtomatik tanlanadi.
+4. **Papkalar jadvalini har birining hajmi bilan** ko'rsatadi (o'rnatuvchi va vaqtinchalik fayllarsiz — aynan nusxalanadigan narsa), umumiy hajmni va fleshkadagi **bo'sh joyni**. Agar sig'masa — ogohlantiradi va davom etishni so'raydi.
+5. **Boshlaymizmi?** — `Y` ni bosing, nusxalash boshlanadi.
 
-Если 10 раз подряд ввести неправильный номер, скрипт завершится.
+Agar ketma-ket 10 marta noto'g'ri raqam kiritilsa, skript to'xtaydi.
 
-### Что видно во время копирования
+### Nusxalash paytida nima ko'rinadi
 
-Экран очищается, и каждые ~2–3 секунды перерисовывается одна таблица:
+Ekran tozalanadi va har ~2–3 soniyada bitta jadval qayta chiziladi:
 
 ```
  ============================================================================
@@ -124,75 +126,75 @@ D:\b
  ============================================================================
 ```
 
-- **Hozir** — какая папка копируется сейчас, **Nusxalandi** — сколько MB скопировано из общего объёма и процент.
-- **Tezlik** — средняя скорость, **Qolgan vaqt** — сколько осталось при такой скорости.
-- **Holat**: `kutilmoqda` — ждёт, `nusxalanmoqda...` — копируется, `tayyor` — готово, `yo'q` — папки нет, `xato` — были ошибки (подробности в `_backup.log`), `joy yo'q` — пропущена, потому что флешка заполнилась.
-- Процент виден и в названии окна.
-- Копирование начинается с рабочего стола. Если на флешке осталось меньше 100 MB, оставшиеся папки пропускаются — поэтому важные папки идут первыми.
-- Пути копируемых файлов на экран не выводятся — они пишутся в `_backup.log`.
+- **Hozir** — hozir qaysi papka nusxalanmoqda, **Nusxalandi** — umumiy hajmdan necha MB nusxalangani va foizi.
+- **Tezlik** — o'rtacha tezlik, **Qolgan vaqt** — shu tezlikda qancha vaqt qolgani.
+- **Holat**: `kutilmoqda` — navbatda, `nusxalanmoqda...` — nusxalanmoqda, `tayyor` — tayyor, `yo'q` — papka yo'q, `xato` — xatolar bo'ldi (tafsilotlar `_backup.log` da), `joy yo'q` — fleshka to'lgani uchun o'tkazib yuborildi.
+- Foiz oyna sarlavhasida ham ko'rinadi.
+- Nusxalash ish stolidan (Desktop) boshlanadi. Fleshkada 100 MB dan kam joy qolsa, qolgan papkalar o'tkazib yuboriladi — shuning uchun muhim papkalar birinchi navbatda nusxalanadi.
+- Nusxalanayotgan fayllarning yo'llari ekranga chiqmaydi — ular `_backup.log` ga yoziladi.
 
 ---
 
-## Что копируется
+## Nimalar nusxalanadi
 
-### Папки профиля
+### Profil papkalari
 
-- **Desktop, Documents, Pictures, Videos, Music, Favorites, Links** — целиком.
-- **Downloads** — всё, **кроме** установщиков и образов: `.exe`, `.msi`, `.msix`, `.appx`, `.iso`, `.img`, `.vhd`, `.vhdx`, `.dmg`, `.pkg`, `.deb`, `.rpm`.
-- **AppData\Roaming** и **AppData\Local** — целиком, **вместе с кэшами** браузеров и программ, кроме папок `Temp`.
-- **Boshqa papkalar** — всё остальное из корня профиля: например `.cache`, `anaconda3`, `.vscode`, `.gitconfig` и другие папки и файлы программ. Попадает в папку `Profil_boshqa\`. Не копируются только уже скопированные выше папки и файлы реестра пользователя `NTUSER.DAT`.
+- **Desktop, Documents, Pictures, Videos, Music, Favorites, Links** — to'liq.
+- **Downloads** — hammasi, o'rnatuvchi fayllar va obrazlardan **tashqari**: `.exe`, `.msi`, `.msix`, `.appx`, `.iso`, `.img`, `.vhd`, `.vhdx`, `.dmg`, `.pkg`, `.deb`, `.rpm`.
+- **AppData\Roaming** va **AppData\Local** — to'liq, brauzer va dasturlar **keshlari bilan birga**, faqat `Temp` papkalarisiz.
+- **Boshqa papkalar** — profil ildizidagi qolgan hamma narsa: masalan `.cache`, `anaconda3`, `.vscode`, `.gitconfig` va boshqa dastur papkalari va fayllari. `Profil_boshqa\` papkasiga tushadi. Faqat yuqorida allaqachon nusxalangan papkalar va foydalanuvchi reestri fayllari `NTUSER.DAT` nusxalanmaydi.
 
-Кэши и AppData занимают много места и состоят из множества мелких файлов, поэтому бэкап получается большим, а копирование — долгим. Флешку бери с запасом.
+Keshlar va AppData ko'p joy egallaydi va juda ko'p mayda fayllardan iborat, shuning uchun zaxira katta bo'ladi va nusxalash uzoq davom etadi. Fleshkani zaxira bilan oling.
 
-### Специальные данные
+### Maxsus ma'lumotlar
 
-| Папка | Что внутри |
+| Papka | Ichida nima bor |
 |---|---|
-| `_Bookmarks\` | Закладки Chrome и Edge (файл `Bookmarks`), папка профилей Firefox |
-| `_Outlook\` | Файлы `.pst` / `.ost` / `.nst` из `Documents\Outlook Files` и `AppData\...\Microsoft\Outlook` |
-| `_RDP\` | `.rdp` файлы из `Documents\` и настройки приложения Remote Desktop |
-| `_SSH\` | Папка `.ssh` (ключи, `known_hosts`, `config`) и `putty_sessions.reg` — сессии PuTTY |
-| `_UserFonts\` | Шрифты, установленные только для пользователя |
-| `_StickyNotes\` | Стикеры рабочего стола: `Modern\` (Windows 10/11) и `Legacy\` (Windows 7/8) |
+| `_Bookmarks\` | Chrome va Edge xatcho'plari (`Bookmarks` fayli), Firefox profillari papkasi |
+| `_Outlook\` | `Documents\Outlook Files` va `AppData\...\Microsoft\Outlook` dagi `.pst` / `.ost` / `.nst` fayllar |
+| `_RDP\` | `Documents\` dagi `.rdp` fayllar va Remote Desktop ilovasi sozlamalari |
+| `_SSH\` | `.ssh` papkasi (kalitlar, `known_hosts`, `config`) va `putty_sessions.reg` — PuTTY seanslari |
+| `_UserFonts\` | Faqat foydalanuvchi uchun o'rnatilgan shriftlar |
+| `_StickyNotes\` | Ish stoli stikerlari: `Modern\` (Windows 10/11) va `Legacy\` (Windows 7/8) |
 
-Восстановление: Outlook — **File → Open & Export → Open Outlook Data File**; PuTTY — двойной клик по `putty_sessions.reg`.
+Tiklash: Outlook — **File → Open & Export → Open Outlook Data File**; PuTTY — `putty_sessions.reg` ni ikki marta bosing.
 
-### Файлы для восстановления (`_SystemInfo\`)
+### Tiklash uchun fayllar (`_SystemInfo\`)
 
-| Файл / папка | Что внутри |
+| Fayl / papka | Ichida nima bor |
 |---|---|
-| `WiFi\` | В живой Windows — XML-профили с паролями в открытом виде. В WinPE — сырые XML-профили, пароли в них зашифрованы и расшифровываются только той же Windows. |
-| `hosts` | Копия файла `Windows\System32\drivers\etc\hosts` |
+| `WiFi\` | Ishlab turgan Windows da — parollari ochiq ko'rinishdagi XML profillar. WinPE da — xom XML profillar, ulardagi parollar shifrlangan va faqat o'sha Windows da ochiladi. |
+| `hosts` | `Windows\System32\drivers\etc\hosts` faylining nusxasi |
 
-Всё остальное (сведения о компьютере, список программ, ключ Windows, итоги) — в `report.html`, отдельных txt-файлов нет.
+Qolgan hamma narsa (kompyuter haqida ma'lumot, dasturlar ro'yxati, Windows kaliti, natijalar) — `report.html` da, alohida txt fayllar yo'q.
 
-Восстановление:
+Tiklash:
 
 ```cmd
-rem Wi-Fi (только XML из живой Windows)
+rem Wi-Fi (faqat ishlab turgan Windows dan olingan XML)
 netsh wlan add profile filename="E:\...\WiFi\Home_Network.xml"
 ```
 
-Драйверы не копируются: их проще поставить заново с сайта производителя.
+Drayverlar nusxalanmaydi: ularni ishlab chiqaruvchi saytidan qayta o'rnatish osonroq.
 
 ---
 
-## Что НЕ копируется
+## Nimalar nusxalanMAYDI
 
-- **Установщики и образы** в Downloads (их легко скачать заново)
-- **Временные файлы**: папки `Temp` / `tmp`, файлы `*.tmp`, `*.temp`
-- **Системные файлы папок**: `Thumbs.db`, `desktop.ini`
-- **Реестр пользователя**: `NTUSER.DAT` и связанные файлы в корне профиля
-- **Корзина** (`$Recycle.Bin`) и `System Volume Information`
-- **Служебные профили**: `Public`, `Default`, `Default User`, `All Users`, `defaultuser0`, `WDAGUtilityAccount`
+- Downloads dagi **o'rnatuvchi fayllar va obrazlar** (ularni qayta yuklab olish oson)
+- **Vaqtinchalik fayllar**: `Temp` / `tmp` papkalari, `*.tmp`, `*.temp` fayllar
+- **Papkalarning tizim fayllari**: `Thumbs.db`, `desktop.ini`
+- **Foydalanuvchi reestri**: profil ildizidagi `NTUSER.DAT` va unga bog'liq fayllar
+- **Savat** (`$Recycle.Bin`) va `System Volume Information`
+- **Xizmat profillari**: `Public`, `Default`, `Default User`, `All Users`, `defaultuser0`, `WDAGUtilityAccount`
 
-Списки исключений — переменные `X_STD`, `X_DL` и `X_ROOT` в начале шага 4 в `b.cmd`.
+Istisnolar ro'yxati — `b.cmd` dagi 4-qadam boshidagi `X_STD`, `X_DL` va `X_ROOT` o'zgaruvchilari.
 
 ---
 
-## Результат
+## Natija
 
-Всё складывается в одну папку на флешке: `D:\Backup_<имя>_ГГГГММДД_ЧЧММ\`.
+Hammasi fleshkadagi bitta papkaga tushadi: `D:\Backup_<ism>_YYYYMMDD_HHMM\`.
 
 ```
 Backup_Muzaffar_20261009_1530\
@@ -201,40 +203,40 @@ Backup_Muzaffar_20261009_1530\
 ├── AppData_Roaming\  AppData_Local\
 ├── Profil_boshqa\   .cache, anaconda3, .vscode ...
 ├── _Bookmarks\  _Outlook\  _RDP\  _SSH\  _UserFonts\  _StickyNotes\
-├── _SystemInfo\     Wi-Fi профили и hosts для восстановления
-├── _backup.log      подробный лог robocopy (Unicode): все скопированные файлы и ошибки
-└── report.html      интерактивный отчёт - открывать в первую очередь
+├── _SystemInfo\     tiklash uchun Wi-Fi profillari va hosts
+├── _backup.log      robocopy ning batafsil jurnali (Unicode): barcha nusxalangan fayllar va xatolar
+└── report.html      interaktiv hisobot - birinchi navbatda shuni oching
 ```
 
-### Интерактивный отчёт `report.html`
+### Interaktiv hisobot `report.html`
 
-Все отчёты собраны в одной странице. Она открывается в любом браузере, работает без интернета, сама подстраивается под светлую или тёмную тему и нормально смотрится на телефоне.
+Barcha hisobotlar bitta sahifada jamlangan. U har qanday brauzerda ochiladi, internetsiz ishlaydi, yorug' yoki qorong'i mavzuga o'zi moslashadi va telefonda ham yaxshi ko'rinadi.
 
-Слева — список отчётов (на телефоне — полоса сверху), рядом с некоторыми — счётчики:
+Chap tomonda — hisobotlar ro'yxati (telefonda — yuqoridagi panel), ba'zilarining yonida hisoblagich bor:
 
-| Раздел | Что внутри |
+| Bo'lim | Ichida nima bor |
 |---|---|
-| **Umumiy** | Итоговые цифры: сколько скопировано, сколько файлов, время, средняя скорость, готовые папки, ошибки. Размер каждой папки бэкапа, круговая диаграмма по типам файлов, 10 самых больших файлов. Клик по папке — открывает её в дереве, по типу — список таких файлов. |
-| **Papkalar** | По каждой из 11 папок: план, реально скопированный объём, время и статус. |
-| **Fayl turlari** | Типы файлов (документы, фото, видео, аудио, архивы, код, файлы программ, прочее) и 60 самых «тяжёлых» расширений: количество, размер, доля. Клик по строке — список этих файлов. |
-| **Fayllar** | Все скопированные файлы: поиск по имени или папке, фильтры по типу, по папке и по размеру (больше 1 MB / 10 MB / 100 MB / 1 GB), сортировка по имени, папке, типу, размеру и дате (клик по заголовку столбца). Показывается по 200 строк, кнопка «Yana 200 ta» добавляет ещё. |
-| **Papka daraxti** | Обзор папок как в проводнике: вложенные папки и файлы, отсортированные по размеру, с полосками. Клик — внутрь, путь сверху — назад. |
-| **Dasturlar** | Установленные программы по алфавиту, без повторов, с поиском. В WinPE берутся из реестра Windows-диска, в обычной Windows — из текущего реестра. |
-| **Kompyuter** | Производитель, модель, серийный номер, процессор, память, видеокарты, диски, BIOS, названия Wi-Fi сетей. Ключ Windows скрыт, кроме последних 5 символов, кнопка «Ko'rsatish» показывает его целиком. |
-| **Qo'shimcha** | Закладки, Outlook, SSH, RDP, шрифты, стикеры, hosts, Wi-Fi — что сохранено, что пропущено. |
-| **Xatolar** | Файлы, которые не удалось скопировать (до 2000 строк; полный список — в `_backup.log`). |
+| **Umumiy** | Asosiy raqamlar: qancha nusxalandi, nechta fayl, vaqt, o'rtacha tezlik, tayyor papkalar, xatolar. Zaxiradagi har bir papkaning hajmi, fayl turlari bo'yicha doiraviy diagramma, eng katta 10 fayl. Papkani bosish — uni daraxtda ochadi, turni bosish — shu turdagi fayllar ro'yxatini. |
+| **Papkalar** | 11 ta papkaning har biri bo'yicha: reja, haqiqatda nusxalangan hajm, vaqt va holat. |
+| **Fayl turlari** | Fayl turlari (hujjatlar, rasmlar, videolar, audio, arxivlar, kod, dastur fayllari, boshqalar) va eng «og'ir» 60 ta kengaytma: soni, hajmi, ulushi. Qatorni bosish — shu fayllar ro'yxati. |
+| **Fayllar** | Barcha nusxalangan fayllar: nomi yoki papkasi bo'yicha qidirish, turi, papkasi va hajmi bo'yicha filtrlar (1 MB / 10 MB / 100 MB / 1 GB dan katta), nomi, papkasi, turi, hajmi va sanasi bo'yicha saralash (ustun sarlavhasini bosing). 200 qatordan ko'rsatiladi, «Yana 200 ta» tugmasi yana qo'shadi. |
+| **Papka daraxti** | Papkalarni xuddi Explorer dagidek ko'rish: ichki papkalar va fayllar hajmi bo'yicha saralangan, chiziqlar bilan. Bosish — ichiga kirish, yuqoridagi yo'l — orqaga qaytish. |
+| **Dasturlar** | O'rnatilgan dasturlar alifbo tartibida, takrorlarsiz, qidiruv bilan. WinPE da Windows diskining reestridan, oddiy Windows da — joriy reestrdan olinadi. |
+| **Kompyuter** | Ishlab chiqaruvchi, model, seriya raqami, protsessor, xotira, videokartalar, disklar, BIOS, Wi-Fi tarmoqlari nomlari. Windows kaliti oxirgi 5 belgidan tashqari yashirilgan, «Ko'rsatish» tugmasi uni to'liq ko'rsatadi. |
+| **Qo'shimcha** | Xatcho'plar, Outlook, SSH, RDP, shriftlar, stikerlar, hosts, Wi-Fi — nima saqlandi, nima o'tkazib yuborildi. |
+| **Xatolar** | Nusxalab bo'lmagan fayllar (2000 qatorgacha; to'liq ro'yxat — `_backup.log` da). |
 
-Список файлов встраивается в страницу, поэтому на большом бэкапе отчёт весит десятки мегабайт (около 30 MB на 600 000 файлов). Проверено: такая страница открывается меньше чем за секунду, поиск по 600 000 файлов занимает около 0,3 секунды.
+Fayllar ro'yxati sahifaga joylashtiriladi, shuning uchun katta zaxirada hisobot o'nlab megabayt bo'ladi (600 000 faylga taxminan 30 MB). Sinab ko'rilgan: bunday sahifa bir soniyadan kam vaqtda ochiladi, 600 000 fayl ichida qidirish taxminan 0,3 soniya oladi.
 
 ---
 
-## Требования и ограничения
+## Talablar va cheklovlar
 
-- **Windows 7+** или любой **WinPE**, флешка с достаточным местом.
-- **Права администратора** — в WinPE они есть всегда. Без них часть файлов и реестра будет пропущена.
-- **`wmic`** — нужен для размеров дисков в таблице и свободного места на флешке. Если его нет (новые сборки Windows 11), буквы дисков всё равно найдутся, но размеры будут `?`, а свободное место — `0 MB`: скрипт предупредит, что данные «не влезают» — ответь `Y`, чтобы продолжить. Прогресс при этом тоже работает, но обновляется медленнее: скрипт пересчитывает уже скопированное.
-- **`ping`** используется как пауза между обновлениями таблицы. Если его нет, таблица просто будет обновляться чаще.
-- **Размер профиля** считается через `robocopy` и не зависит от языка системы.
-- **Не зависит от `findstr`, `where`, `timeout` и PowerShell** — в урезанных сборках WinPE их может не быть.
-- **Браузер** для просмотра отчёта — любой современный (Edge, Chrome, Firefox) с включённым JavaScript.
-- **Безопасность**: в бэкапе окажутся SSH-ключи, Wi-Fi профили (в живой Windows — с паролями в открытом виде) и ключ Windows в отчёте. Храни флешку в надёжном месте.
+- **Windows 7+** yoki istalgan **WinPE**, yetarli joyi bor fleshka.
+- **Administrator huquqlari** — WinPE da ular doim bor. Ularsiz fayllar va reestrning bir qismi o'tkazib yuboriladi.
+- **`wmic`** — jadvaldagi disk hajmlari va fleshkadagi bo'sh joy uchun kerak. Agar u bo'lmasa (Windows 11 ning yangi versiyalari), disk harflari baribir topiladi, lekin hajmlar `?` bo'ladi, bo'sh joy esa `0 MB`: skript ma'lumotlar «sig'maydi» deb ogohlantiradi — davom etish uchun `Y` ni bosing. Jarayon jadvali bunda ham ishlaydi, lekin sekinroq yangilanadi: skript nusxalanganini qayta hisoblaydi.
+- **`ping`** jadval yangilanishlari orasidagi pauza uchun ishlatiladi. Agar u bo'lmasa, jadval shunchaki tez-tez yangilanadi.
+- **Profil hajmi** `robocopy` orqali hisoblanadi va tizim tiliga bog'liq emas.
+- **`findstr`, `where`, `timeout` va PowerShell ga bog'liq emas** — WinPE ning qisqartirilgan versiyalarida ular bo'lmasligi mumkin.
+- **Brauzer** — hisobotni ko'rish uchun JavaScript yoqilgan istalgan zamonaviy brauzer (Edge, Chrome, Firefox).
+- **Xavfsizlik**: zaxirada SSH kalitlari, Wi-Fi profillari (ishlab turgan Windows da — parollar ochiq ko'rinishda) va hisobotda Windows kaliti bo'ladi. Fleshkani ishonchli joyda saqlang.
