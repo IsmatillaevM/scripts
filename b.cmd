@@ -218,9 +218,11 @@ echo  [*] Profil hajmini hisoblash (1-3 daqiqa kutilsin)...
 rem --- Hajm hisoblash: 3 ta usul ---
 set "SIZE_BYTES=0"
 
-rem Usul 1: robocopy /L
-for /f "tokens=1,2,3,4,5" %%A in ('robocopy "!SRC!" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ 2^>nul') do (
-    if /I "%%A"=="Bytes" if "!SIZE_BYTES!"=="0" set "SIZE_BYTES=%%C"
+rem Usul 1: robocopy /L - til mustaqil: yakuniy jadvalning 3-qatori (Dirs, Files, Bytes)
+set RC_ROW=0
+for /f "tokens=1* delims=:" %%A in ('robocopy "!SRC!" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 2^>nul ^| findstr /C:" : " ^| findstr /V /R /C:"^[0-9]"') do (
+    set /A RC_ROW+=1
+    if !RC_ROW!==3 for /f "tokens=1" %%N in ("%%B") do set "SIZE_BYTES=%%N"
 )
 
 rem Usul 2: dir /s
@@ -239,9 +241,9 @@ if "!SIZE_BYTES!"=="0" (
 
 set "SRC_GB=0"
 if not "!SIZE_BYTES!"=="0" (
-    set "TMP=!SIZE_BYTES!"
-    if not "!TMP!"=="" (
-        set "SHORT=!TMP:~0,-9!"
+    set "NUMTMP=!SIZE_BYTES!"
+    if not "!NUMTMP!"=="" (
+        set "SHORT=!NUMTMP:~0,-9!"
         if "!SHORT!"=="" set "SHORT=0"
         set "SRC_GB=!SHORT!"
     )
@@ -249,13 +251,13 @@ if not "!SIZE_BYTES!"=="0" (
 
 rem --- Fleshka bo'sh joy ---
 set "FREE_BYTES=0"
-for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do set "FREE_BYTES=%%S"
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%S") do set "FREE_BYTES=%%x"
 
 set "FREE_GB=0"
 if not "!FREE_BYTES!"=="0" (
-    set "TMP=!FREE_BYTES!"
-    if not "!TMP!"=="" (
-        set "SHORT=!TMP:~0,-9!"
+    set "NUMTMP=!FREE_BYTES!"
+    if not "!NUMTMP!"=="" (
+        set "SHORT=!NUMTMP:~0,-9!"
         if "!SHORT!"=="" set "SHORT=0"
         set "FREE_GB=!SHORT!"
     )
@@ -279,7 +281,7 @@ if !SRC_GB! GTR !FREE_GB! (
     echo  ============================================================================
     echo.
     set "GOON="
-    set /P GOON=  Baribir davom etilsinmi? (Y - ha):
+    set /P GOON=  Baribir davom etilsinmi? [Y - ha]:
     if /I not "!GOON!"=="Y" (
         echo  [i] Bekor qilindi.
         pause
@@ -403,10 +405,11 @@ set "GVN="
 set "GFS="
 set "GSZ="
 set "GTP="
-for /f "usebackq tokens=2 delims==" %%V in (`wmic logicaldisk where "DeviceID='!GL!'" get VolumeName /value 2^>nul ^| find "="`) do set "GVN=%%V"
-for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!GL!'" get FreeSpace /value 2^>nul ^| find "="`) do set "GFS=%%S"
-for /f "usebackq tokens=2 delims==" %%Z in (`wmic logicaldisk where "DeviceID='!GL!'" get Size /value 2^>nul ^| find "="`) do set "GSZ=%%Z"
-for /f "usebackq tokens=2 delims==" %%T in (`wmic logicaldisk where "DeviceID='!GL!'" get DriveType /value 2^>nul ^| find "="`) do set "GTP=%%T"
+rem Ichki "for /f" wmic qo'shadigan oxirgi CR belgisini olib tashlaydi
+for /f "usebackq tokens=2 delims==" %%V in (`wmic logicaldisk where "DeviceID='!GL!'" get VolumeName /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%V") do set "GVN=%%x"
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!GL!'" get FreeSpace /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%S") do set "GFS=%%x"
+for /f "usebackq tokens=2 delims==" %%Z in (`wmic logicaldisk where "DeviceID='!GL!'" get Size /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%Z") do set "GSZ=%%x"
+for /f "usebackq tokens=2 delims==" %%T in (`wmic logicaldisk where "DeviceID='!GL!'" get DriveType /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%T") do set "GTP=%%x"
 
 rem GB konversiya
 set "GFS_GB=?"
