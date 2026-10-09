@@ -216,10 +216,9 @@ echo.
 echo  [*] Hajm hisoblanmoqda - istisnolar hisobga olinadi (1-3 daqiqa)...
 
 rem --- Istisnolar: nusxalashda ham, hajm hisobida ham bir xil ---
-set "X_STD=/XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock""
-set "X_DL=/XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm""
-set "X_ROAM=/XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock""
-set "X_LOCAL=/XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock""
+rem Keshlar ham nusxalanadi; faqat vaqtinchalik fayllar, savat va (Downloads'da) o'rnatuvchilar chiqariladi
+set "X_STD=/XD "$Recycle.Bin" "System Volume Information" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp""
+set "X_DL=/XD "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm""
 
 rem --- Papkalar ro'yxati: nom, manba, zaxiradagi papka, istisnolar ---
 set NSEC=0
@@ -231,8 +230,11 @@ call :addsec "Music"           "Music"            "Music"            X_STD
 call :addsec "Favorites"       "Favorites"        "Favorites"        X_STD
 call :addsec "Links"           "Links"            "Links"            X_STD
 call :addsec "Downloads"       "Downloads"        "Downloads"        X_DL
-call :addsec "AppData\Roaming" "AppData\Roaming"  "AppData_Roaming"  X_ROAM
-call :addsec "AppData\Local"   "AppData\Local"    "AppData_Local"    X_LOCAL
+call :addsec "AppData\Roaming" "AppData\Roaming"  "AppData_Roaming"  X_STD
+call :addsec "AppData\Local"   "AppData\Local"    "AppData_Local"    X_STD
+rem Profil ildizidagi qolgan hamma narsa (.cache, anaconda3, .vscode va h.k.) - yuqoridagi papkalarsiz
+set "X_ROOT=/XD "!SRC!\Desktop" "!SRC!\Documents" "!SRC!\Pictures" "!SRC!\Videos" "!SRC!\Music" "!SRC!\Favorites" "!SRC!\Links" "!SRC!\Downloads" "!SRC!\AppData" "$Recycle.Bin" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "ntuser.*" "NTUSER.*""
+call :addsec "Boshqa papkalar" ""                 "Profil_boshqa"    X_ROOT
 
 set TOTAL_MB=0
 for /L %%I in (1,1,%NSEC%) do call :measure_sec %%I
@@ -437,6 +439,7 @@ rem %1 nom, %2 profildagi papka, %3 zaxiradagi papka, %4 istisnolar o'zgaruvchis
 set /A NSEC+=1
 set "S_NAME_!NSEC!=%~1"
 set "S_SRC_!NSEC!=!SRC!\%~2"
+if "%~2"=="" set "S_SRC_!NSEC!=!SRC!"
 set "S_DST_!NSEC!=%~3"
 set "S_X_!NSEC!=!%~4!"
 set "S_MB_!NSEC!=0"
