@@ -16,9 +16,11 @@ echo    WinPE Backup  -  foydalanuvchi ma'lumotlarini zaxiralash
 echo  ============================================================================
 echo.
 
-net session >nul 2>&1
+rem Admin check: fsutil dirty query ishonchliroq ishlaydi, hatto WinPE'da ham
+fsutil dirty query %SystemDrive% >nul 2>&1
 if errorlevel 1 (
     echo  [W] Diqqat: administrator huquqisiz ishga tushirilgan.
+    echo      Ba'zi himoyalangan fayllar o'tkazib yuborilishi mumkin.
     echo.
 )
 
@@ -78,14 +80,24 @@ echo    1-QADAM: ZAXIRA UCHUN DISK TANLASH (fleshka)
 echo  ============================================================================
 echo.
 
+set DST_TRIES=0
 :ask_dst
 echo.
+set /A DST_TRIES+=1
+if !DST_TRIES! GTR 10 (
+    echo  [W] Juda ko'p noto'g'ri urinish. Chiqildi.
+    exit /b 1
+)
 set "DPICK="
 set /P DPICK=  Fleshka raqamini kiriting (1-%DNUM%):
 if not defined DPICK goto :ask_dst
 call set "DST=%%DRV_!DPICK!%%"
 if "!DST!"=="" (
     echo  [W] Noto'g'ri raqam.
+    goto :ask_dst
+)
+if /I "!DST!"=="X:" (
+    echo  [W] X: - bu WinPE ichki diski, zaxira uchun yaroqsiz.
     goto :ask_dst
 )
 call set "DST_INFO=%%INFO_!DPICK!%%"
@@ -108,14 +120,24 @@ echo    2-QADAM: WINDOWS DISKI TANLASH
 echo  ============================================================================
 echo.
 
+set SRC_TRIES=0
 :ask_src_drive
 echo.
+set /A SRC_TRIES+=1
+if !SRC_TRIES! GTR 10 (
+    echo  [W] Juda ko'p noto'g'ri urinish. Chiqildi.
+    exit /b 1
+)
 set "SPICK="
 set /P SPICK=  Windows disk raqamini kiriting (1-%DNUM%):
 if not defined SPICK goto :ask_src_drive
 call set "SYS_DRIVE=%%DRV_!SPICK!%%"
 if "!SYS_DRIVE!"=="" (
     echo  [W] Noto'g'ri raqam.
+    goto :ask_src_drive
+)
+if /I "!SYS_DRIVE!"=="X:" (
+    echo  [W] X: - bu WinPE ichki diski, Windows u yerda emas.
     goto :ask_src_drive
 )
 if /I "!SYS_DRIVE!"=="!DST!" (
@@ -163,7 +185,13 @@ if %PNUM% EQU 1 (
     goto :prof_done
 )
 
+set PROF_TRIES=0
 :ask_prof
+set /A PROF_TRIES+=1
+if !PROF_TRIES! GTR 10 (
+    echo  [W] Juda ko'p noto'g'ri urinish. Chiqildi.
+    exit /b 1
+)
 set "PPICK="
 set /P PPICK=  Profil raqamini kiriting (1-%PNUM%):
 if not defined PPICK goto :ask_prof
