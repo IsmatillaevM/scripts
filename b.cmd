@@ -315,9 +315,8 @@ set "BACKUP=!DST!\Backup_%UNAME%%STAMP%"
 mkdir "%BACKUP%" 2>nul
 mkdir "%BACKUP%\_SystemInfo" 2>nul
 set "LOG=%BACKUP%\_backup.log"
-rem Natijalar avval vaqtinchalik faylga yoziladi, oxirida _summary.txt UTF-8 da yig'iladi
+rem Bo'limlar holati vaqtinchalik faylga yoziladi va oxirida HTML hisobotga qo'shiladi
 set "SUMMARY=%BACKUP%\_wb_sum.tmp"
-set "SUMFINAL=%BACKUP%\_summary.txt"
 set "REPORT=%BACKUP%\report.html"
 set "T_BEGIN=%DATE% %TIME:~0,8%"
 type nul > "%SUMMARY%"
@@ -366,7 +365,7 @@ call :user_fonts
 call :sticky_notes
 call :hosts_file
 
-rem Hisobot va matn fayllari UTF-8 da yoziladi: aks holda Bloknot kirill harflarini buzadi.
+rem Hisobot UTF-8 da yoziladi: aks holda kirill va boshqa harflar buziladi.
 rem Nusxalash tugagandan keyin almashtiriladi, shunda nusxalash qismiga ta'sir qilmaydi.
 set "OLDCP="
 for /f "tokens=2 delims=:." %%c in ('chcp') do set /A OLDCP=%%c
@@ -374,7 +373,6 @@ chcp 65001 >nul 2>&1
 echo    [*] Tizim ma'lumotlari va HTML hisobot - 1-5 daqiqa...
 call :collect_sysinfo
 call :make_html_report
-call :write_summary
 del "%WORKER%" "%RCFILE%" "%SUMMARY%" 2>nul
 
 set "CNAME=TAYYOR"
@@ -382,8 +380,8 @@ call :draw
 title TAYYOR - WinPE Backup
 echo.
 echo    Papka:    %BACKUP%
-echo    Hisobot:  %REPORT%   - brauzerda oching
-echo    Natija:   _summary.txt
+echo    Hisobot:  %REPORT%
+echo              - brauzerda oching: barcha natijalar, fayllar, dasturlar, kompyuter
 echo  ============================================================================
 echo.
 pause
@@ -761,11 +759,8 @@ exit /b 0
 set "SI=%BACKUP%\_SystemInfo"
 
 rem --- O'rnatilgan dasturlar: WinPE da - Windows diskidagi reestrdan, oddiy Windows da - joriy reestrdan
-set "APPS_TXT=%SI%\installed_programs.txt"
-set "APPS_LI=%BACKUP%\_wb_apps.tmp"
-> "%APPS_TXT%" echo O'rnatilgan dasturlar
->> "%APPS_TXT%" echo =====================
-type nul > "%APPS_LI%"
+set "APPS_TMP=%BACKUP%\_wb_apps.tmp"
+type nul > "%APPS_TMP%"
 set APPS_N=0
 set "APPS_DONE="
 if defined SYS_DRIVE if exist "!SYS_DRIVE!\Windows\System32\config\SOFTWARE" (
@@ -783,8 +778,10 @@ if not defined APPS_DONE (
 )
 >> "%SUMMARY%" echo [ok]   dasturlar
 
-rem --- Wi-Fi profillari va tarmoq nomlari
+rem --- Wi-Fi profillari (tiklash uchun XML) va tarmoq nomlari
 set "WIFI_DIR=%SI%\WiFi"
+set "WIFI_TMP=%BACKUP%\_wb_wifi.tmp"
+type nul > "%WIFI_TMP%"
 mkdir "%WIFI_DIR%" 2>nul
 netsh wlan show profiles >nul 2>&1
 if not errorlevel 1 (
@@ -795,26 +792,15 @@ if not errorlevel 1 (
         if exist "!WLAN_SRC!" robocopy "!WLAN_SRC!" "%WIFI_DIR%\RawProfiles" /E /R:1 /W:1 /NFL /NDL /NP >nul
     )
 )
-set "WIFI_LIST="
 for /r "%WIFI_DIR%" %%F in (*.xml) do call :wifi_name "%%F"
 >> "%SUMMARY%" echo [ok]   Wi-Fi
 
-rem --- Windows OEM kaliti
+rem --- Windows OEM kaliti (faqat ishlab turgan Windows da o'qiladi)
 set "WKEY="
 for /f "usebackq tokens=2 delims==" %%K in (`wmic path softwarelicensingservice get OA3xOriginalProductKey /value 2^>nul ^| find "="`) do for /f "tokens=*" %%x in ("%%K") do set "WKEY=%%x"
-set "KEY_TXT=%SI%\windows_product_key.txt"
-> "%KEY_TXT%" echo Windows OEM kaliti
-if defined WKEY (
-    >> "%KEY_TXT%" echo !WKEY!
-    set "WKEY_M=*****-*****-*****-*****-!WKEY:~-5!"
-    >> "%SUMMARY%" echo [ok]   Windows kaliti
-) else (
-    >> "%KEY_TXT%" echo topilmadi - WinPE da kalitni o'qib bo'lmaydi
-    set "WKEY_M=topilmadi"
-    >> "%SUMMARY%" echo [skip] Windows kaliti
-)
+if defined WKEY (>> "%SUMMARY%" echo [ok]   Windows kaliti) else (>> "%SUMMARY%" echo [skip] Windows kaliti)
 
-rem --- Kompyuter haqida (wmic qiymatlari qatorma-qator olinadi: UTF-16 aralashmaydi)
+rem --- Kompyuter haqida (wmic qiymatlari qatorma-qator olinadi)
 call :wmi1 "computersystem" "Manufacturer" HW_MAN
 call :wmi1 "computersystem" "Model" HW_MODEL
 call :wmi1 "bios" "SerialNumber" HW_SERIAL
@@ -839,19 +825,6 @@ set "HW_BIOS=!HW_BIOSM! !HW_BIOSV!"
 if defined HW_BIOSD set "HW_BIOS=!HW_BIOS!, !HW_BIOSD:~0,4!-!HW_BIOSD:~4,2!-!HW_BIOSD:~6,2!"
 set "HW_CT="
 if defined HW_CORES set "HW_CT=!HW_CORES! yadro / !HW_THREADS! oqim"
-
-set "HW=%SI%\hardware.txt"
-> "%HW%" echo Kompyuter haqida
->> "%HW%" echo ================
->> "%HW%" echo Ishlab chiqaruvchi: !HW_MAN!
->> "%HW%" echo Model:              !HW_MODEL!
->> "%HW%" echo Seriya raqami:      !HW_SERIAL!
->> "%HW%" echo Protsessor:         !HW_CPU!
->> "%HW%" echo Yadrolar:           !HW_CT!
->> "%HW%" echo Operativ xotira:    !HW_RAM!
->> "%HW%" echo Videokarta:         !HW_GPU!
->> "%HW%" echo Disklar:            !HW_DISKS!
->> "%HW%" echo BIOS:               !HW_BIOS!
 >> "%SUMMARY%" echo [ok]   kompyuter ma'lumotlari
 exit /b 0
 
@@ -859,9 +832,7 @@ exit /b 0
 for /f "tokens=*" %%K in ('reg query "%~1" 2^>nul') do (
     for /f "tokens=2,*" %%A in ('reg query "%%K" /v DisplayName 2^>nul ^| find "REG_SZ"') do (
         set "AN=%%B"
-        >> "%APPS_TXT%" echo(!AN!
-        call :esc AN
-        >> "%APPS_LI%" echo ^<li^>!AN!^</li^>
+        >> "%APPS_TMP%" echo(!AN!
         set /A APPS_N+=1
     )
 )
@@ -874,7 +845,7 @@ if not defined SS exit /b 0
 set "SS=!SS:<name>=!"
 set "SS=!SS:</name>=!"
 for /f "tokens=*" %%t in ("!SS!") do set "SS=%%t"
-if defined WIFI_LIST (set "WIFI_LIST=!WIFI_LIST!, !SS!") else set "WIFI_LIST=!SS!"
+>> "%WIFI_TMP%" echo(!SS!
 exit /b 0
 
 :wmi1
@@ -907,48 +878,11 @@ for /f "usebackq tokens=1* delims==" %%A in (`wmic diskdrive get Model^,Size /va
 )
 exit /b 0
 
-:esc
-rem O'zgaruvchidagi & < > belgilarini HTML uchun xavfsiz qiladi
-if not defined %~1 exit /b 0
-set "EV=!%~1!"
-set "EV=!EV:&=&amp;!"
-set "EV=!EV:<=&lt;!"
-set "EV=!EV:>=&gt;!"
-set "%~1=!EV!"
-exit /b 0
-
-:rc_stats
-rem Zaxiradagi CATF maskali fayllar: soni RS_FILES va hajmi RS_MB
-set "RS_FILES=0"
-set "RS_B="
-set RC_ROW=0
-for /f "tokens=1* delims=:" %%A in ('robocopy "%~1" NULL !CATF! /L /S /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 /XD "%~1\_SystemInfo" 2^>nul ^| find " : "') do (
-    set /A RC_ROW+=1
-    if !RC_ROW!==2 for /f "tokens=2" %%N in ("%%B") do set "RS_FILES=%%N"
-    if !RC_ROW!==3 for /f "tokens=2" %%N in ("%%B") do set "RS_B=%%N"
-)
-set "RS_MB=0"
-if defined RS_B set "RS_MB=!RS_B:~0,-6!"
-if "!RS_MB!"=="" set "RS_MB=0"
-exit /b 0
-
-:cat
-set /A NCAT+=1
-set "C_NAME_!NCAT!=%~1"
-set "CATF=%~2"
-call :rc_stats "%BACKUP%"
-set "C_N_!NCAT!=!RS_FILES!"
-set "C_MB_!NCAT!=!RS_MB!"
-exit /b 0
-
 :make_html_report
-set NCAT=0
-call :cat "Hujjatlar" "*.pdf *.doc *.docx *.odt *.rtf *.txt *.md *.xls *.xlsx *.ods *.csv *.ppt *.pptx *.odp"
-call :cat "Rasmlar"   "*.jpg *.jpeg *.png *.gif *.bmp *.tif *.tiff *.webp *.svg *.heic *.raw *.cr2 *.nef *.arw"
-call :cat "Videolar"  "*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.3gp"
-call :cat "Audio"     "*.mp3 *.wav *.flac *.aac *.ogg *.m4a *.wma *.opus"
-call :cat "Arxivlar"  "*.zip *.rar *.7z *.tar *.gz *.bz2 *.xz"
-call :cat "Kod"       "*.py *.ipynb *.js *.ts *.java *.c *.cpp *.h *.hpp *.cs *.go *.rs *.rb *.php *.html *.css *.sql *.sh *.ps1"
+rem Hisobot = shablon + xom ma'lumotlar (<script type=text/plain> ichida). Brauzer ularni o'zi tahlil qiladi,
+rem shuning uchun yuz minglab fayl bo'lsa ham cmd har bir qatorni qayta ishlamaydi.
+set "FLIST=%BACKUP%\_wb_files.log"
+robocopy "%BACKUP%" NULL /L /E /BYTES /TS /NC /NJH /NJS /XJ /R:0 /W:0 /XF "report.html" "_backup.log" "_wb_*" /UNILOG:"%FLIST%" >nul 2>&1
 
 set N_OK=0
 set N_ALL=0
@@ -956,131 +890,75 @@ for /L %%I in (1,1,%NSEC%) do (
     if not "!S_ST_%%I!"=="yo'q" set /A N_ALL+=1
     if "!S_ST_%%I!"=="tayyor" set /A N_OK+=1
 )
-set /A GBI=DONE_MB/1000, GBF=(DONE_MB%%1000)/100
-set "DONE_STR=!GBI!.!GBF! GB"
-if !DONE_MB! LSS 1000 set "DONE_STR=!DONE_MB! MB"
-
-set "HU=!UNAME!"
-call :esc HU
-set "HSRC=!SRC!"
-call :esc HSRC
-set "HBK=%BACKUP%"
-call :esc HBK
-for %%v in (HW_MAN HW_MODEL HW_SERIAL HW_CPU HW_GPU HW_DISKS HW_BIOS WIFI_LIST) do call :esc %%v
 
 type nul > "%REPORT%"
 call :emit HEAD
->> "%REPORT%" echo ^<h1^>Zaxira hisoboti^</h1^>
->> "%REPORT%" echo ^<p class='sub'^>!HU! - !HW_MAN! !HW_MODEL! - !T_BEGIN!^</p^>
 
->> "%REPORT%" echo ^<div class='kpis'^>
->> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>Nusxalandi^</div^>^<div class='v'^>!DONE_STR!^</div^>^</div^>
->> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>Sarflangan vaqt^</div^>^<div class='v'^>!COPY_HMS!^</div^>^</div^>
->> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>O'rtacha tezlik^</div^>^<div class='v'^>!AVG_SPD!^</div^>^</div^>
->> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>Tayyor papkalar^</div^>^<div class='v'^>!N_OK! / !N_ALL!^</div^>^</div^>
->> "%REPORT%" echo ^</div^>
+>> "%REPORT%" echo ^<script type='text/plain' id='d-meta'^>
+>> "%REPORT%" echo(user=!UNAME!
+>> "%REPORT%" echo(src=!SRC!
+>> "%REPORT%" echo(backup=%BACKUP%
+>> "%REPORT%" echo(begin=!T_BEGIN!
+>> "%REPORT%" echo(end=%DATE% %TIME:~0,8%
+>> "%REPORT%" echo(copyhms=!COPY_HMS!
+>> "%REPORT%" echo(avgspd=!AVG_SPD!
+>> "%REPORT%" echo(donemb=!DONE_MB!
+>> "%REPORT%" echo(planmb=!TOTAL_MB!
+>> "%REPORT%" echo(freemb=!FREE_NOW_MB!
+>> "%REPORT%" echo(okn=!N_OK!
+>> "%REPORT%" echo(alln=!N_ALL!
+>> "%REPORT%" echo(man=!HW_MAN!
+>> "%REPORT%" echo(model=!HW_MODEL!
+>> "%REPORT%" echo(serial=!HW_SERIAL!
+>> "%REPORT%" echo(cpu=!HW_CPU!
+>> "%REPORT%" echo(ct=!HW_CT!
+>> "%REPORT%" echo(ram=!HW_RAM!
+>> "%REPORT%" echo(gpu=!HW_GPU!
+>> "%REPORT%" echo(disks=!HW_DISKS!
+>> "%REPORT%" echo(bios=!HW_BIOS!
+>> "%REPORT%" echo(wkey=!WKEY!
+>> "%REPORT%" echo ^</script^>
 
->> "%REPORT%" echo ^<h2^>Papkalar^</h2^>
->> "%REPORT%" echo ^<div class='card'^>^<table^>^<tr^>^<th^>#^</th^>^<th^>Papka^</th^>^<th class='n'^>Reja, MB^</th^>^<th class='n'^>Nusxalandi, MB^</th^>^<th class='n'^>Vaqt^</th^>^<th^>Holat^</th^>^</tr^>
-for /L %%I in (1,1,%NSEC%) do call :html_row %%I
->> "%REPORT%" echo ^</table^>^</div^>
+>> "%REPORT%" echo ^<script type='text/plain' id='d-sec'^>
+for /L %%I in (1,1,%NSEC%) do (
+    >> "%REPORT%" echo(!S_NAME_%%I!^|!S_MB_%%I!^|!S_CP_%%I!^|!S_T_%%I!^|!S_ST_%%I!
+)
+>> "%REPORT%" echo ^</script^>
 
->> "%REPORT%" echo ^<h2^>Fayl turlari^</h2^>
->> "%REPORT%" echo ^<div class='grid'^>
-for /L %%I in (1,1,!NCAT!) do call :html_cat %%I
->> "%REPORT%" echo ^</div^>
-
->> "%REPORT%" echo ^<h2^>Qo'shimcha ma'lumotlar^</h2^>
->> "%REPORT%" echo ^<div class='card'^>^<table^>
+>> "%REPORT%" echo ^<script type='text/plain' id='d-ext'^>
 set "SKIPOPT="
 if !SUM_LINES! GTR 0 set "SKIPOPT=skip=!SUM_LINES!"
-for /f "usebackq %SKIPOPT% tokens=1*" %%A in ("%SUMMARY%") do call :html_extra "%%A" "%%B"
->> "%REPORT%" echo ^</table^>^</div^>
+for /f "usebackq %SKIPOPT% delims=" %%A in ("%SUMMARY%") do >> "%REPORT%" echo(%%A
+>> "%REPORT%" echo ^</script^>
 
->> "%REPORT%" echo ^<h2^>Kompyuter^</h2^>
->> "%REPORT%" echo ^<div class='card'^>^<div class='kv'^>
-call :kv "Ishlab chiqaruvchi" HW_MAN
-call :kv "Model" HW_MODEL
-call :kv "Seriya raqami" HW_SERIAL
-call :kv "Protsessor" HW_CPU
-call :kv "Yadrolar" HW_CT
-call :kv "Operativ xotira" HW_RAM
-call :kv "Videokarta" HW_GPU
-call :kv "Disklar" HW_DISKS
-call :kv "BIOS" HW_BIOS
-call :kv "Windows kaliti" WKEY_M
-call :kv "Wi-Fi tarmoqlari" WIFI_LIST
->> "%REPORT%" echo ^</div^>^</div^>
+>> "%REPORT%" echo ^<script type='text/plain' id='d-apps'^>
+type "%APPS_TMP%" >> "%REPORT%" 2>nul
+>> "%REPORT%" echo ^</script^>
 
->> "%REPORT%" echo ^<h2^>O'rnatilgan dasturlar - ^<span id='appcount'^>!APPS_N!^</span^>^</h2^>
->> "%REPORT%" echo ^<input id='q' type='search' placeholder='Qidirish...' autocomplete='off'^>
->> "%REPORT%" echo ^<div class='card'^>^<ul class='apps' id='apps'^>
-if !APPS_N! GTR 0 (type "%APPS_LI%" >> "%REPORT%") else (>> "%REPORT%" echo ^<li^>Ro'yxat topilmadi^</li^>)
->> "%REPORT%" echo ^</ul^>^</div^>
+>> "%REPORT%" echo ^<script type='text/plain' id='d-wifi'^>
+type "%WIFI_TMP%" >> "%REPORT%" 2>nul
+>> "%REPORT%" echo ^</script^>
 
->> "%REPORT%" echo ^<div class='foot'^>Manba: ^<code^>!HSRC!^</code^>^<br^>Zaxira: ^<code^>!HBK!^</code^>^<br^>Batafsil jurnal: ^<code^>_backup.log^</code^> - tizim fayllari: ^<code^>_SystemInfo^</code^>^</div^>
+rem Xatolar: robocopy jurnalida xato qatorlarida "(0x..." kodi bor - bu tilga bog'liq emas
+set ERRN=0
+>> "%REPORT%" echo ^<script type='text/plain' id='d-err'^>
+for /f "delims=" %%E in ('type "%LOG%" 2^>nul ^| find "(0x"') do (
+    set /A ERRN+=1
+    if !ERRN! LEQ 2000 >> "%REPORT%" echo(%%E
+)
+>> "%REPORT%" echo ^</script^>
+>> "%REPORT%" echo ^<script type='text/plain' id='d-errn'^>!ERRN!^</script^>
+
+>> "%REPORT%" echo ^<script type='text/plain' id='d-files'^>
+type "%FLIST%" >> "%REPORT%" 2>nul
+>> "%REPORT%" echo ^</script^>
+
 call :emit TAIL
-del "%APPS_LI%" 2>nul
-exit /b 0
-
-:html_row
-for %%i in (%~1) do (
-    set "RN=!S_NAME_%%i!"
-    set "RP=!S_MB_%%i!"
-    set "RCP=!S_CP_%%i!"
-    set "RS=!S_ST_%%i!"
-    set "RT=!S_T_%%i!"
-)
-set "CLS=skip"
-if "!RS!"=="tayyor" set "CLS=ok"
-if "!RS:~0,4!"=="xato" set "CLS=err"
-if "!RS!"=="joy yo'q" set "CLS=warn"
-call :fmt_hms !RT! RTH
-if "!CLS!"=="skip" (
-    set "RTH=-"
-    set "RCP=-"
-)
->> "%REPORT%" echo ^<tr^>^<td^>%~1^</td^>^<td^>!RN!^</td^>^<td class='n'^>!RP!^</td^>^<td class='n'^>!RCP!^</td^>^<td class='n'^>!RTH!^</td^>^<td^>^<span class='b !CLS!'^>!RS!^</span^>^</td^>^</tr^>
-exit /b 0
-
-:html_cat
-for %%i in (%~1) do (
-    set "CN=!C_NAME_%%i!"
-    set "CC=!C_N_%%i!"
-    set "CM=!C_MB_%%i!"
-)
-set PW=0
-if !DONE_MB! GTR 0 set /A PW=CM*100/DONE_MB
-if !PW! GTR 100 set PW=100
-if !PW! EQU 0 if !CM! GTR 0 set PW=1
->> "%REPORT%" echo ^<div class='kpi'^>^<div class='l'^>!CN!^</div^>^<div class='v'^>!CC!^</div^>^<div class='l'^>fayl, !CM! MB^</div^>^<div class='bar'^>^<i style='width:!PW!%%'^>^</i^>^</div^>^</div^>
-exit /b 0
-
-:html_extra
-set "XS=%~1"
-set "XN=%~2"
-set "CLS=skip"
-set "XT=o'tkazildi"
-if "!XS!"=="[ok]" (
-    set "CLS=ok"
-    set "XT=tayyor"
-)
-if "!XS!"=="[xato]" (
-    set "CLS=err"
-    set "XT=xato"
-)
-call :esc XN
->> "%REPORT%" echo ^<tr^>^<td^>!XN!^</td^>^<td^>^<span class='b !CLS!'^>!XT!^</span^>^</td^>^</tr^>
-exit /b 0
-
-:kv
-set "KV=!%~2!"
-if not defined KV set "KV=-"
->> "%REPORT%" echo ^<div^>%~1^</div^>^<div^>!KV!^</div^>
+del "%FLIST%" "%APPS_TMP%" "%WIFI_TMP%" 2>nul
 exit /b 0
 
 :emit
-rem Shu faylning oxiridagi ::BEGIN_x ... ::END_x orasidagi HTML qatorlarini hisobotga yozadi
+rem Shu faylning oxiridagi ::BEGIN_x ... ::END_x orasidagi qatorlarni hisobotga yozadi
 setlocal DisableDelayedExpansion
 set "EMIT="
 for /f "usebackq eol=` delims=" %%L in ("%SELF%") do (
@@ -1091,22 +969,9 @@ for /f "usebackq eol=` delims=" %%L in ("%SELF%") do (
 endlocal
 exit /b 0
 
-:write_summary
-> "%SUMFINAL%" echo Zaxira natijasi
->> "%SUMFINAL%" echo ===============
->> "%SUMFINAL%" echo Foydalanuvchi: !UNAME!
->> "%SUMFINAL%" echo Manba:         !SRC!
->> "%SUMFINAL%" echo Zaxira:        %BACKUP%
->> "%SUMFINAL%" echo Boshlandi:     !T_BEGIN!
->> "%SUMFINAL%" echo Tugadi:        %DATE% %TIME:~0,8%
->> "%SUMFINAL%" echo Nusxalandi:    !DONE_MB! MB, vaqt !COPY_HMS!, o'rtacha tezlik !AVG_SPD!
->> "%SUMFINAL%" echo.
-type "%SUMMARY%" >> "%SUMFINAL%"
-exit /b 0
-
 rem ===========================================================================
 rem  HTML shabloni - bajarilmaydi, faqat :emit o'qiydi.
-rem  Ichida qo'sh tirnoq ishlatilmaydi (faqat bittalik), qatorlar ; bilan boshlanmaydi.
+rem  Qoidalar: qo'sh tirnoq ishlatilmaydi, qator ` yoki : bilan boshlanmaydi.
 rem ===========================================================================
 ::BEGIN_HEAD
 <!DOCTYPE html>
@@ -1116,57 +981,300 @@ rem ===========================================================================
 <meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Zaxira hisoboti</title>
 <style>
-html{--bg:#f6f7f9;--card:#ffffff;--text:#1f2328;--muted:#656d76;--line:#d8dee4;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--err:#cf222e;--skip:#6e7781}
-@media (prefers-color-scheme:dark){html{--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#8d96a0;--line:#30363d;--accent:#4493f8;--ok:#3fb950;--warn:#d29922;--err:#f85149;--skip:#8d96a0}}
+html{--bg:#f6f7f9;--card:#ffffff;--text:#1f2328;--muted:#656d76;--line:#d8dee4;--accent:#0969da;--hover:#eef2f6;--ok:#1a7f37;--warn:#9a6700;--err:#cf222e;--skip:#6e7781}
+@media (prefers-color-scheme:dark){html{--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#8d96a0;--line:#30363d;--accent:#4493f8;--hover:#1f2630;--ok:#3fb950;--warn:#d29922;--err:#f85149;--skip:#8d96a0}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,'Segoe UI',Roboto,Arial,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:28px 16px 56px}
-h1{font-size:28px;margin:0 0 4px;letter-spacing:-.01em}
-h2{font-size:18px;margin:36px 0 12px}
-.sub{color:var(--muted);margin:0 0 22px}
-.kpis,.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
-.kpi .l{color:var(--muted);font-size:13px}
-.kpi .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.3}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:auto}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+.app{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
+nav{position:sticky;top:0;height:100vh;overflow:auto;padding:20px 12px;background:var(--card);border-right:1px solid var(--line)}
+nav .brand{font-weight:700;font-size:16px;padding:0 10px 2px}
+nav .who{color:var(--muted);font-size:12px;padding:0 10px 14px}
+nav a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;color:var(--text);text-decoration:none}
+nav a:hover{background:var(--hover)}
+nav a.on{background:var(--accent);color:#fff}
+nav a .c{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+nav a.on .c{color:#fff}
+main{padding:24px 28px 64px;min-width:0}
+section{display:none;max-width:1200px}
+section.on{display:block}
+h1{font-size:24px;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:16px;margin:26px 0 10px}
+.sub{color:var(--muted);margin:0 0 16px}
+.muted{color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi,.box{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.kpi{padding:12px 14px}
+.kpi .l{color:var(--muted);font-size:12px}
+.kpi .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.3}
+.box{overflow:auto}
+.row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{font-size:13px;color:var(--muted);font-weight:600}
+th,td{text-align:left;padding:7px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--card)}
+th.s{cursor:pointer;user-select:none}
+th.s:hover{color:var(--text)}
 tr:last-child td{border-bottom:0}
+tr.k,.legend div{cursor:pointer}
+tr.k:hover td,.legend div:hover{background:var(--hover)}
 .n{text-align:right}
-.b{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid currentColor}
+td.p{white-space:normal;word-break:break-all;color:var(--muted);font-size:12px;min-width:160px}
+td.w{white-space:normal;word-break:break-all}
+.b{display:inline-block;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid currentColor}
 .ok{color:var(--ok)}
 .skip{color:var(--skip)}
 .err{color:var(--err)}
 .warn{color:var(--warn)}
-.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px}
-.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
-.kv{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:8px 16px;padding:16px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:70px}
+.bar i{display:block;height:100%;border-radius:4px;background:var(--accent)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+.donut{width:170px;height:170px;border-radius:50%;margin:18px auto 10px;position:relative}
+.donut::after{content:'';position:absolute;inset:36px;border-radius:50%;background:var(--card)}
+.legend{padding:0 8px 10px}
+.legend div{display:flex;justify-content:space-between;gap:10px;padding:4px 8px;border-radius:6px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+input,select,button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+input[type=search]{flex:1;min-width:200px}
+button{cursor:pointer}
+button:hover{background:var(--hover)}
+.more{display:block;margin:12px auto}
+.crumb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 6px}
+.crumb a{color:var(--accent);cursor:pointer}
+.kv{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:8px 16px;padding:14px 16px;margin:0}
 .kv div:nth-child(odd){color:var(--muted)}
 .kv div:nth-child(even){word-break:break-word}
-input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;margin-bottom:10px}
-ul.apps{columns:2 300px;column-gap:28px;margin:0;padding:14px 16px 14px 34px}
+ul.apps{columns:2 300px;column-gap:28px;margin:0;padding:12px 16px 12px 32px}
 ul.apps li{break-inside:avoid;padding:2px 0}
-.foot{color:var(--muted);font-size:13px;margin-top:36px;word-break:break-all}
-code{font-family:Consolas,'Courier New',monospace;font-size:13px}
-@media print{body{background:#fff}.kpi,.card{break-inside:avoid}input{display:none}}
+pre{margin:0;padding:12px 16px;font:12px/1.55 Consolas,'Courier New',monospace;white-space:pre-wrap;word-break:break-all}
+@media (max-width:760px){.app{grid-template-columns:1fr}nav{height:auto;display:flex;gap:4px;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid var(--line);z-index:2}nav .brand,nav .who{display:none}nav a{white-space:nowrap}main{padding:16px}.row{grid-template-columns:1fr}}
 </style>
 </head>
-<body><div class='wrap'>
+<body>
+<div class='app'>
+<nav id='nav'><div class='brand'>Zaxira hisoboti</div><div class='who' id='who'></div></nav>
+<main id='main'><noscript>Hisobotni ko'rish uchun brauzerda JavaScript yoqilgan bo'lishi kerak.</noscript></main>
+</div>
 ::END_HEAD
 ::BEGIN_TAIL
 <script>
 (function(){
-var ul=document.getElementById('apps');if(ul===null){return}
-var seen={},items=[];
-Array.prototype.forEach.call(ul.querySelectorAll('li'),function(li){var t=li.textContent.trim(),k=t.toLowerCase();if(t.length>0&&seen[k]===undefined){seen[k]=1;items.push(t)}});
-items.sort(function(a,b){return a.localeCompare(b)});
-ul.innerHTML='';
-items.forEach(function(t){var li=document.createElement('li');li.textContent=t;ul.appendChild(li)});
-var c=document.getElementById('appcount');if(c){c.textContent=items.length}
-var q=document.getElementById('q');
-if(q){q.addEventListener('input',function(){var v=q.value.toLowerCase();Array.prototype.forEach.call(ul.children,function(li){li.style.display=li.textContent.toLowerCase().indexOf(v)<0?'none':''})})}
+'use strict';
+function $(id){return document.getElementById(id)}
+function txt(id){var e=$(id);return e?e.textContent:''}
+function lines(id){return txt(id).split(/\r?\n/).map(function(l){return l.replace(/\s+$/,'')}).filter(function(l){return l.length>0})}
+var ENT={'&':'&amp;','<':'&lt;','>':'&gt;','\x27':'&#39;'};
+function esc(s){return String(s==null?'':s).replace(/[&<>\x27]/g,function(c){return ENT[c]})}
+function pad(v){return (v<10?'0':'')+v}
+function fmt(n){n=+n||0;if(n<1024)return n+' B';var u=['KB','MB','GB','TB'],i=-1;do{n/=1024;i++}while(n>=1024&&i<3);return n.toFixed(n<10?2:1)+' '+u[i]}
+function num(n){return (+n||0).toLocaleString('ru-RU')}
+function hms(s){s=Math.max(0,s|0);return pad(s/3600|0)+':'+pad((s%3600)/60|0)+':'+pad(s%60)}
+function dt(t){if(!t)return '-';var d=new Date(t);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())}
+function bar(p,c){p=Math.max(0,Math.min(100,+p||0));if(p>0&&p<1)p=1;return `<div class=bar><i style='width:${p.toFixed(1)}%;${c?'background:'+c:''}'></i></div>`}
+function kpi(l,v){return `<div class=kpi><div class=l>${esc(l)}</div><div class=v>${esc(v)}</div></div>`}
+function stc(s){s=String(s||'').toLowerCase();if(s==='tayyor'||s==='ok')return 'ok';if(s.indexOf('xato')===0)return 'err';if(s.indexOf('joy')===0)return 'warn';return 'skip'}
+function badge(s,label){return `<span class='b ${stc(s)}'>${esc(label||s)}</span>`}
+function uniq(a){var seen={},r=[];a.forEach(function(x){var k=x.toLowerCase();if(x&&!seen[k]){seen[k]=1;r.push(x)}});return r}
+
+var M={};
+lines('d-meta').forEach(function(l){var i=l.indexOf('=');if(i>0)M[l.slice(0,i)]=l.slice(i+1).trim()});
+var SEC=lines('d-sec').map(function(l){var p=l.split('|');return {name:p[0],plan:+p[1]||0,cp:+p[2]||0,t:+p[3]||0,st:(p[4]||'').trim()}});
+var EXTRA=lines('d-ext').map(function(l){var m=l.match(/^\[(\w+)\]\s+(.*)$/);return m?{st:m[1],name:m[2]}:null}).filter(Boolean);
+var APPS=uniq(lines('d-apps').map(function(s){return s.trim()})).sort(function(a,b){return a.localeCompare(b)});
+var WIFI=uniq(lines('d-wifi').map(function(s){return s.trim()}));
+var ERR=lines('d-err');
+var ERRN=+txt('d-errn')||ERR.length;
+
+var CATS=[
+{n:'Hujjatlar',c:'#4493f8',x:'pdf doc docx odt rtf txt md xls xlsx ods csv ppt pptx odp'},
+{n:'Rasmlar',c:'#3fb950',x:'jpg jpeg png gif bmp tif tiff webp svg heic raw cr2 nef arw ico'},
+{n:'Videolar',c:'#f85149',x:'mp4 mkv avi mov wmv flv webm m4v mpg mpeg 3gp'},
+{n:'Audio',c:'#d29922',x:'mp3 wav flac aac ogg m4a wma opus'},
+{n:'Arxivlar',c:'#a371f7',x:'zip rar 7z tar gz bz2 xz iso cab'},
+{n:'Kod',c:'#39c5cf',x:'py ipynb js ts jsx tsx java c cpp h hpp cs go rs rb php html css sql sh ps1 json xml yml yaml toml'},
+{n:'Dastur fayllari',c:'#db61a2',x:'exe dll pyd so sys msi lib bin dat'},
+{n:'Boshqa',c:'#8d96a0',x:''}];
+var OTHER=CATS.length-1,EXT2C={};
+CATS.forEach(function(c,i){c.x.split(' ').forEach(function(e){if(e)EXT2C[e]=i})});
+
+var DIRS=[],FILES=[];
+(function(){
+var raw=txt('d-files').split(/\r?\n/),map={},root='',cur=-1,re=/^(\d+)\s+(\d{4})\/(\d\d)\/(\d\d)\s+(\d\d):(\d\d):(\d\d)/;
+for(var k=0;k<raw.length;k++){
+var l=raw[k];if(l.indexOf('\t')<0)continue;
+var f=l.split('\t'),name=f[f.length-1],meta=(f[f.length-2]||'').trim();
+if(!name)continue;
+if(name.charAt(name.length-1)==='\\'){
+if(root==='')root=name;
+var rel=name.slice(root.length,-1),par=-1;
+if(rel!==''){var j=rel.lastIndexOf('\\'),pp=j<0?'':rel.slice(0,j);par=map[pp]===undefined?0:map[pp]}
+map[rel]=DIRS.length;
+DIRS.push({p:rel,nm:rel===''?'Zaxira':rel.slice(rel.lastIndexOf('\\')+1),par:par,size:0,cnt:0,kids:[],files:[],top:-1});
+if(par>=0)DIRS[par].kids.push(DIRS.length-1);
+cur=DIRS.length-1;
+}else if(cur>=0){
+var m=re.exec(meta),size=m?+m[1]:(parseInt(meta,10)||0);
+var t=m?Date.UTC(+m[2],m[3]-1,+m[4],+m[5],+m[6],+m[7]):0;
+var dot=name.lastIndexOf('.'),ext=dot>0?name.slice(dot+1).toLowerCase():'';
+var ci=EXT2C[ext];if(ci===undefined)ci=OTHER;
+FILES.push({n:name,s:size,t:t,d:cur,e:ext,c:ci});
+DIRS[cur].files.push(FILES.length-1);
+for(var q=cur;q>=0;q=DIRS[q].par){DIRS[q].size+=size;DIRS[q].cnt++}
+}
+}
+DIRS.forEach(function(d,i){var q=i;while(q>0&&DIRS[q].par>0)q=DIRS[q].par;d.top=i===0?-1:q});
+})();
+var TOT=DIRS.length?DIRS[0].size:0;
+var CS=CATS.map(function(){return {n:0,s:0}}),EXT={};
+FILES.forEach(function(f){CS[f.c].n++;CS[f.c].s+=f.s;var e=EXT[f.e]||(EXT[f.e]={e:f.e,n:0,s:0,c:f.c});e.n++;e.s+=f.s});
+var EXTL=Object.keys(EXT).map(function(k){return EXT[k]}).sort(function(a,b){return b.s-a.s});
+function topDirs(){return DIRS.length?DIRS[0].kids.slice().sort(function(a,b){return DIRS[b].size-DIRS[a].size}):[]}
+function topN(n){var r=[];for(var i=0;i<FILES.length;i++){if(r.length<n||FILES[i].s>FILES[r[r.length-1]].s){r.push(i);r.sort(function(a,b){return FILES[b].s-FILES[a].s});if(r.length>n)r.pop()}}return r}
+
+var PAGES=[
+{id:'umumiy',t:'Umumiy',r:pOverview},
+{id:'papkalar',t:'Papkalar',r:pSections,c:SEC.length},
+{id:'turlar',t:'Fayl turlari',r:pTypes},
+{id:'fayllar',t:'Fayllar',r:pFiles,c:FILES.length},
+{id:'daraxt',t:'Papka daraxti',r:pTree},
+{id:'dasturlar',t:'Dasturlar',r:pApps,c:APPS.length},
+{id:'kompyuter',t:'Kompyuter',r:pPC},
+{id:'qoshimcha',t:'Qo\x27shimcha',r:pExtra},
+{id:'xatolar',t:'Xatolar',r:pErr,c:ERRN}];
+var nav=$('nav'),main=$('main');
+main.innerHTML='';
+$('who').textContent=(M.user||'')+' - '+(M.begin||'');
+PAGES.forEach(function(p){
+var a=document.createElement('a');a.href='#'+p.id;a.id='n-'+p.id;
+a.innerHTML=esc(p.t)+(p.c!==undefined?`<span class=c>${num(p.c)}</span>`:'');
+nav.appendChild(a);
+var s=document.createElement('section');s.id='s-'+p.id;main.appendChild(s);
+});
+function show(){
+var id=(location.hash||'#umumiy').slice(1),p=PAGES.filter(function(x){return x.id===id})[0]||PAGES[0];
+PAGES.forEach(function(x){$('n-'+x.id).classList.toggle('on',x===p);$('s-'+x.id).classList.toggle('on',x===p)});
+var s=$('s-'+p.id);if(!s.dataset.done){s.dataset.done='1';p.r(s)}
+window.scrollTo(0,0);
+}
+function go(id){if(location.hash==='#'+id)show();else location.hash=id}
+
+function pOverview(s){
+var tops=topDirs(),mx=tops.length?DIRS[tops[0]].size||1:1,big=topN(10),deg=0,stops=[];
+CS.forEach(function(c,i){if(!c.s||!TOT)return;var a=deg;deg+=c.s/TOT*360;stops.push(CATS[i].c+' '+a.toFixed(2)+'deg '+deg.toFixed(2)+'deg')});
+if(!stops.length)stops.push('var(--line) 0deg 360deg');
+s.innerHTML=`<h1>Zaxira hisoboti</h1><p class=sub>${esc(M.user)} - ${esc(M.man)} ${esc(M.model)} - ${esc(M.begin)}</p>
+<div class=kpis>${kpi('Nusxalandi',fmt(TOT))}${kpi('Fayllar',num(FILES.length))}${kpi('Sarflangan vaqt',M.copyhms||'-')}${kpi('O\x27rtacha tezlik',M.avgspd||'-')}${kpi('Tayyor papkalar',(M.okn||0)+' / '+(M.alln||0))}${kpi('Xatolar',num(ERRN))}</div>
+<div class=row><div><h2>Papkalar bo\x27yicha hajm</h2><div class=box><table>${tops.map(function(i){var d=DIRS[i];return `<tr class=k data-d=${i}><td>${esc(d.nm)}</td><td class=n>${fmt(d.size)}</td><td style='width:45%'>${bar(d.size/mx*100)}</td></tr>`}).join('')}</table></div></div>
+<div><h2>Fayl turlari</h2><div class=box><div class=donut style='background:conic-gradient(${stops.join(',')})'></div><div class=legend>${CS.map(function(c,i){return c.n?`<div data-c=${i}><span><span class=dot style='background:${CATS[i].c}'></span>${esc(CATS[i].n)}</span><span class=muted>${fmt(c.s)}</span></div>`:''}).join('')}</div></div></div></div>
+<h2>Eng katta 10 fayl</h2><div class=box><table><tr><th>Nomi</th><th>Papka</th><th class=n>Hajmi</th></tr>${big.map(function(i){var f=FILES[i];return `<tr><td class=w>${esc(f.n)}</td><td class=p>${esc(DIRS[f.d].p)}</td><td class=n>${fmt(f.s)}</td></tr>`}).join('')}</table></div>
+<p class=muted>Manba: ${esc(M.src)}<br>Zaxira: ${esc(M.backup)}<br>Boshlandi: ${esc(M.begin)}, tugadi: ${esc(M.end)}</p>`;
+s.querySelectorAll('tr[data-d]').forEach(function(tr){tr.onclick=function(){openTree(+tr.dataset.d)}});
+s.querySelectorAll('.legend div[data-c]').forEach(function(d){d.onclick=function(){openFiles({cat:+d.dataset.c,ext:null})}});
+}
+
+function pSections(s){
+var mx=Math.max.apply(null,SEC.map(function(x){return x.cp}).concat([1]));
+s.innerHTML=`<h1>Papkalar</h1><p class=sub>Reja - nusxalashdan oldin hisoblangan hajm. Nusxalandi - fleshkaga yozilgan hajm.</p><div class=box><table><tr><th>#</th><th>Papka</th><th class=n>Reja</th><th class=n>Nusxalandi</th><th></th><th class=n>Vaqt</th><th>Holat</th></tr>${SEC.map(function(x,i){var sk=stc(x.st)==='skip';return `<tr><td>${i+1}</td><td>${esc(x.name)}</td><td class=n>${num(x.plan)} MB</td><td class=n>${sk?'-':num(x.cp)+' MB'}</td><td style='width:30%'>${sk?'':bar(x.cp/mx*100)}</td><td class=n>${sk?'-':hms(x.t)}</td><td>${badge(x.st)}</td></tr>`}).join('')}</table></div>`;
+}
+
+function pTypes(s){
+var h=`<h1>Fayl turlari</h1><p class=sub>Qatorni bosing - shu turdagi fayllar ro\x27yxati ochiladi.</p><h2>Toifalar</h2><div class=box><table><tr><th>Toifa</th><th class=n>Fayllar</th><th class=n>Hajmi</th><th>Ulushi</th></tr>`;
+CS.forEach(function(c,i){if(!c.n)return;h+=`<tr class=k data-c=${i}><td><span class=dot style='background:${CATS[i].c}'></span>${esc(CATS[i].n)}</td><td class=n>${num(c.n)}</td><td class=n>${fmt(c.s)}</td><td style='width:40%'>${bar(TOT?c.s/TOT*100:0,CATS[i].c)}</td></tr>`});
+h+=`</table></div><h2>Kengaytmalar - eng katta 60 ta</h2><div class=box><table><tr><th>Kengaytma</th><th>Toifa</th><th class=n>Fayllar</th><th class=n>Hajmi</th><th>Ulushi</th></tr>`;
+EXTL.slice(0,60).forEach(function(e){h+=`<tr class=k data-e='${esc(e.e)}'><td>${e.e?'.'+esc(e.e):'kengaytmasiz'}</td><td>${esc(CATS[e.c].n)}</td><td class=n>${num(e.n)}</td><td class=n>${fmt(e.s)}</td><td style='width:35%'>${bar(TOT?e.s/TOT*100:0,CATS[e.c].c)}</td></tr>`});
+s.innerHTML=h+'</table></div>';
+s.querySelectorAll('tr[data-c]').forEach(function(tr){tr.onclick=function(){openFiles({cat:+tr.dataset.c,ext:null})}});
+s.querySelectorAll('tr[data-e]').forEach(function(tr){tr.onclick=function(){openFiles({ext:tr.dataset.e,cat:-1})}});
+}
+
+var FST={q:'',cat:-1,ext:null,top:-1,min:0,sort:'s',asc:false,limit:200},filesUI=null;
+function openFiles(o){Object.assign(FST,{q:'',top:-1,min:0,limit:200},o);if(filesUI)filesUI();go('fayllar')}
+function pFiles(s){
+var tops=topDirs();
+s.innerHTML=`<h1>Fayllar</h1><div class=tools><input type=search id=fq placeholder='Fayl yoki papka nomi...' autocomplete=off>
+<select id=fc><option value=-1>Barcha turlar</option>${CATS.map(function(c,i){return `<option value=${i}>${esc(c.n)}</option>`}).join('')}</select>
+<select id=ft><option value=-1>Barcha papkalar</option>${tops.map(function(i){return `<option value=${i}>${esc(DIRS[i].nm)}</option>`}).join('')}</select>
+<select id=fm><option value=0>Har qanday hajm</option><option value=1048576>1 MB dan katta</option><option value=10485760>10 MB dan katta</option><option value=104857600>100 MB dan katta</option><option value=1073741824>1 GB dan katta</option></select>
+<button id=fx>Tozalash</button></div><p class=sub id=fsum></p>
+<div class=box><table><thead><tr><th class=s data-k=n>Nomi</th><th class=s data-k=p>Papka</th><th class=s data-k=e>Turi</th><th class='s n' data-k=s>Hajmi</th><th class='s n' data-k=t>O\x27zgartirilgan</th></tr></thead><tbody id=fb></tbody></table></div>
+<button class=more id=fmore>Yana 200 ta</button>`;
+var q=$('fq'),c=$('fc'),t=$('ft'),m=$('fm'),res=[],tm=0;
+function sync(){q.value=FST.q;c.value=String(FST.cat);t.value=String(FST.top);m.value=String(FST.min);run()}
+function run(){
+var qq=FST.q.toLowerCase(),out=[];
+for(var i=0;i<FILES.length;i++){var f=FILES[i];
+if(FST.cat>=0&&f.c!==FST.cat)continue;
+if(FST.ext!==null&&f.e!==FST.ext)continue;
+if(f.s<FST.min)continue;
+if(FST.top>=0&&DIRS[f.d].top!==FST.top)continue;
+if(qq&&f.n.toLowerCase().indexOf(qq)<0&&DIRS[f.d].p.toLowerCase().indexOf(qq)<0)continue;
+out.push(i)}
+var k=FST.sort,dir=FST.asc?1:-1;
+out.sort(function(a,b){var x=FILES[a],y=FILES[b],u,v;
+if(k==='s'){u=x.s;v=y.s}else if(k==='t'){u=x.t;v=y.t}else if(k==='e'){u=x.e;v=y.e}else if(k==='p'){u=DIRS[x.d].p;v=DIRS[y.d].p}else{u=x.n.toLowerCase();v=y.n.toLowerCase()}
+return (u<v?-1:u>v?1:0)*dir});
+res=out;var sz=0;for(var j=0;j<out.length;j++)sz+=FILES[out[j]].s;
+$('fsum').textContent=num(out.length)+' ta fayl, '+fmt(sz)+(FST.ext!==null?' - turi: '+(FST.ext?'.'+FST.ext:'kengaytmasiz'):'');
+draw()}
+function draw(){
+var h='',n=Math.min(res.length,FST.limit);
+for(var i=0;i<n;i++){var f=FILES[res[i]];h+=`<tr><td class=w>${esc(f.n)}</td><td class=p>${esc(DIRS[f.d].p)}</td><td>${esc(f.e)}</td><td class=n>${fmt(f.s)}</td><td class=n>${dt(f.t)}</td></tr>`}
+$('fb').innerHTML=h||'<tr><td colspan=5 class=muted>Hech narsa topilmadi</td></tr>';
+$('fmore').style.display=res.length>FST.limit?'block':'none';
+s.querySelectorAll('th.s').forEach(function(th){th.textContent=th.textContent.replace(/ [\u2191\u2193]$/,'');if(th.dataset.k===FST.sort)th.textContent+=FST.asc?' \u2191':' \u2193'})}
+q.oninput=function(){clearTimeout(tm);tm=setTimeout(function(){FST.q=q.value;FST.limit=200;run()},250)};
+c.onchange=function(){FST.cat=+c.value;FST.ext=null;FST.limit=200;run()};
+t.onchange=function(){FST.top=+t.value;FST.limit=200;run()};
+m.onchange=function(){FST.min=+m.value;FST.limit=200;run()};
+$('fx').onclick=function(){Object.assign(FST,{q:'',cat:-1,ext:null,top:-1,min:0,limit:200});sync()};
+$('fmore').onclick=function(){FST.limit+=200;draw()};
+s.querySelectorAll('th.s').forEach(function(th){th.onclick=function(){var k=th.dataset.k;if(FST.sort===k)FST.asc=!FST.asc;else{FST.sort=k;FST.asc=(k==='n'||k==='p'||k==='e')}run()}});
+filesUI=sync;sync();
+}
+
+var TREE=0,treeUI=null;
+function openTree(d){TREE=d;if(treeUI)treeUI();go('daraxt')}
+function pTree(s){
+function draw(){
+if(!DIRS.length){s.innerHTML='<h1>Papka daraxti</h1><p class=muted>Ma\x27lumot yo\x27q</p>';return}
+var d=DIRS[TREE],chain=[],q=TREE;while(q>=0){chain.unshift(q);q=DIRS[q].par}
+var kids=d.kids.slice().sort(function(a,b){return DIRS[b].size-DIRS[a].size});
+var fl=d.files.slice().sort(function(a,b){return FILES[b].s-FILES[a].s}),more=fl.length-300,mx=d.size||1;fl=fl.slice(0,300);
+var h=`<h1>Papka daraxti</h1><p class=sub>Papkani bosing - ichiga kirasiz. Yuqoridagi yo\x27l orqali orqaga qaytasiz.</p><div class=crumb>${chain.map(function(i,k){return (k?'<span class=muted>\\</span>':'')+`<a data-d=${i}>${esc(DIRS[i].nm)}</a>`}).join('')}</div><p class=sub>${num(d.cnt)} ta fayl, ${fmt(d.size)}</p><div class=box><table><tr><th>Nomi</th><th class=n>Fayllar</th><th class=n>Hajmi</th><th>Ulushi</th></tr>`;
+kids.forEach(function(i){var k=DIRS[i];h+=`<tr class=k data-d=${i}><td class=w>&#9656; ${esc(k.nm)}</td><td class=n>${num(k.cnt)}</td><td class=n>${fmt(k.size)}</td><td style='width:40%'>${bar(k.size/mx*100)}</td></tr>`});
+fl.forEach(function(i){var f=FILES[i];h+=`<tr><td class='w muted'>${esc(f.n)}</td><td class=n></td><td class=n>${fmt(f.s)}</td><td style='width:40%'>${bar(f.s/mx*100,CATS[f.c].c)}</td></tr>`});
+if(more>0)h+=`<tr><td colspan=4 class=muted>... yana ${num(more)} ta fayl - Fayllar bo\x27limida qidiring</td></tr>`;
+s.innerHTML=h+'</table></div>';
+s.querySelectorAll('[data-d]').forEach(function(e){e.onclick=function(){TREE=+e.dataset.d;draw();window.scrollTo(0,0)}});
+}
+treeUI=draw;draw();
+}
+
+function pApps(s){
+s.innerHTML=`<h1>O\x27rnatilgan dasturlar</h1><div class=tools><input type=search id=aq placeholder='Qidirish...' autocomplete=off></div><p class=sub id=an></p><div class=box><ul class=apps id=al></ul></div>`;
+function run(){var v=$('aq').value.toLowerCase(),r=APPS.filter(function(a){return a.toLowerCase().indexOf(v)>=0});$('an').textContent=num(r.length)+' ta dastur';$('al').innerHTML=r.map(function(a){return '<li>'+esc(a)+'</li>'}).join('')||'<li class=muted>Topilmadi</li>'}
+$('aq').oninput=run;run();
+}
+
+function pPC(s){
+var rows=[['Ishlab chiqaruvchi',M.man],['Model',M.model],['Seriya raqami',M.serial],['Protsessor',M.cpu],['Yadrolar',M.ct],['Operativ xotira',M.ram],['Videokarta',M.gpu],['Disklar',M.disks],['BIOS',M.bios]],key=M.wkey||'';
+s.innerHTML=`<h1>Kompyuter</h1><div class=box><div class=kv>${rows.map(function(r){return `<div>${esc(r[0])}</div><div>${esc(r[1]||'-')}</div>`}).join('')}<div>Windows kaliti</div><div>${key?`<span id=wk>*****-*****-*****-*****-${esc(key.slice(-5))}</span> <button id=wkb>Ko\x27rsatish</button>`:'topilmadi - WinPE da kalitni o\x27qib bo\x27lmaydi'}</div></div></div>
+<h2>Wi-Fi tarmoqlari - ${WIFI.length}</h2><div class=box>${WIFI.length?'<ul class=apps>'+WIFI.map(function(w){return '<li>'+esc(w)+'</li>'}).join('')+'</ul>':'<p class=kv>Topilmadi</p>'}</div>
+<p class=muted>Tiklash uchun Wi-Fi profillari (XML) va hosts fayli: _SystemInfo papkasida.</p>`;
+var b=$('wkb');if(b)b.onclick=function(){$('wk').textContent=key;b.remove()};
+}
+
+function pExtra(s){
+var lab={ok:'tayyor',skip:'o\x27tkazildi',xato:'xato'};
+s.innerHTML=`<h1>Qo\x27shimcha ma\x27lumotlar</h1><p class=sub>Asosiy papkalardan tashqari alohida saqlanadigan narsalar.</p><div class=box><table><tr><th>Nima</th><th>Holat</th></tr>${EXTRA.map(function(x){return `<tr><td>${esc(x.name)}</td><td>${badge(x.st==='ok'?'ok':(x.st==='xato'?'xato':'skip'),lab[x.st]||x.st)}</td></tr>`}).join('')}</table></div>`;
+}
+
+function pErr(s){
+s.innerHTML=`<h1>Xatolar - ${num(ERRN)}</h1><p class=sub>Nusxalab bo\x27lmagan fayllar. To\x27liq ro\x27yxat va sabablari: _backup.log${ERRN>ERR.length?' (bu yerda birinchi '+num(ERR.length)+' tasi)':''}.</p>${ERR.length?'<div class=box><pre>'+esc(ERR.join('\n'))+'</pre></div>':'<p>Xatolar yo\x27q.</p>'}`;
+}
+
+window.addEventListener('hashchange',show);
+show();
 })();
 </script>
-</div></body></html>
+</body>
+</html>
 ::END_TAIL
