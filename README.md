@@ -1,7 +1,5 @@
 # WinPE Backup
 
-**O'zbekcha** | [Русский](README.ru.md)
-
 Windows foydalanuvchi profilini WinPE dan (yoki oddiy Windows dan) zaxiralash uchun mustaqil skript. Bitta `.cmd` fayl, hech qanday qo'shimcha dastur kerak emas, Windows yuklanmay qolganda ham tiklash muhitida ishlaydi.
 
 Barcha xabarlar **o'zbek tilida (lotin)** — WinPE da ko'pincha kirill shrifti bo'lmaydi.
