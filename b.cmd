@@ -213,71 +213,48 @@ echo  ==========================================================================
 echo    4-QADAM: HAJMNI TEKSHIRISH
 echo  ============================================================================
 echo.
-echo  [*] Profil hajmini hisoblash (1-3 daqiqa kutilsin)...
+echo  [*] Hajm hisoblanmoqda - istisnolar hisobga olinadi (1-3 daqiqa)...
 
-rem --- Hajm hisoblash: 3 ta usul ---
-set "SIZE_BYTES=0"
+rem --- Istisnolar: nusxalashda ham, hajm hisobida ham bir xil ---
+set "X_STD=/XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock""
+set "X_DL=/XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm""
+set "X_ROAM=/XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock""
+set "X_LOCAL=/XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock""
 
-rem Usul 1: robocopy /L - til mustaqil: yakuniy jadvalning 3-qatori (Dirs, Files, Bytes)
-set RC_ROW=0
-for /f "tokens=1* delims=:" %%A in ('robocopy "!SRC!" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 2^>nul ^| find " : "') do (
-    set /A RC_ROW+=1
-    if !RC_ROW!==3 for /f "tokens=1" %%N in ("%%B") do set "SIZE_BYTES=%%N"
-)
+rem --- Papkalar ro'yxati: nom, manba, zaxiradagi papka, istisnolar ---
+set NSEC=0
+call :addsec "Desktop"         "Desktop"          "Desktop"          X_STD
+call :addsec "Documents"       "Documents"        "Documents"        X_STD
+call :addsec "Pictures"        "Pictures"         "Pictures"         X_STD
+call :addsec "Videos"          "Videos"           "Videos"           X_STD
+call :addsec "Music"           "Music"            "Music"            X_STD
+call :addsec "Favorites"       "Favorites"        "Favorites"        X_STD
+call :addsec "Links"           "Links"            "Links"            X_STD
+call :addsec "Downloads"       "Downloads"        "Downloads"        X_DL
+call :addsec "AppData\Roaming" "AppData\Roaming"  "AppData_Roaming"  X_ROAM
+call :addsec "AppData\Local"   "AppData\Local"    "AppData_Local"    X_LOCAL
 
-rem Usul 2: dir /s
-if "!SIZE_BYTES!"=="0" (
-    for /f "tokens=1,2,3" %%A in ('dir "!SRC!" /s /a-d 2^>nul ^| find "File(s)"') do (
-        set "DIRSIZE=%%C"
-        set "DIRSIZE=!DIRSIZE:,=!"
-        set "SIZE_BYTES=!DIRSIZE!"
-    )
-)
+set TOTAL_MB=0
+for /L %%I in (1,1,%NSEC%) do call :measure_sec %%I
 
-rem Usul 3: PowerShell
-if "!SIZE_BYTES!"=="0" (
-    for /f "usebackq" %%S in (`powershell -NoProfile -Command "(Get-ChildItem -Path '!SRC!' -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum" 2^>nul`) do set "SIZE_BYTES=%%S"
-)
-
-set "SRC_GB=0"
-if not "!SIZE_BYTES!"=="0" (
-    set "NUMTMP=!SIZE_BYTES!"
-    if not "!NUMTMP!"=="" (
-        set "SHORT=!NUMTMP:~0,-9!"
-        if "!SHORT!"=="" set "SHORT=0"
-        set "SRC_GB=!SHORT!"
-    )
-)
-
-rem --- Fleshka bo'sh joy ---
-set "FREE_BYTES=0"
-for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%S") do set "FREE_BYTES=%%x"
-
-set "FREE_GB=0"
-if not "!FREE_BYTES!"=="0" (
-    set "NUMTMP=!FREE_BYTES!"
-    if not "!NUMTMP!"=="" (
-        set "SHORT=!NUMTMP:~0,-9!"
-        if "!SHORT!"=="" set "SHORT=0"
-        set "FREE_GB=!SHORT!"
-    )
-)
+call :free_mb
+set "FREE_MB=0"
+if defined FREE_NOW_MB set "FREE_MB=!FREE_NOW_MB!"
+set /A TOTAL_GB=TOTAL_MB/1000
 
 echo.
-echo    Profil hajmi (!UNAME!):     ~!SRC_GB! GB
-echo    Fleshkada bo'sh joy (!DST!): !FREE_GB! GB
+echo    #   Papka                  Hajm, MB   Holat
+echo    --  ---------------------  ---------  ----------------
+for /L %%I in (1,1,%NSEC%) do call :draw_row %%I
+echo.
+echo    Jami:                 !TOTAL_MB! MB  - taxminan !TOTAL_GB! GB
+echo    Fleshkada bo'sh joy:  !FREE_MB! MB
 echo.
 
-rem Agar hajm 0 bo'lsa - ogohlantirish
-if "!SRC_GB!"=="0" (
-    echo  [i] Hajm aniqlanmadi, lekin bu normal - nusxalash davom etadi.
-    echo.
-)
-
-if !SRC_GB! GTR !FREE_GB! (
+if !TOTAL_MB! GTR !FREE_MB! (
     echo  ============================================================================
-    echo  [W] DIQQAT: ma'lumotlar fleshkaga sig'maydi!
-    echo      Kerak: !SRC_GB! GB, bor: !FREE_GB! GB
+    echo  [W] DIQQAT: ma'lumotlar fleshkaga sig'maydi
+    echo      Kerak: !TOTAL_MB! MB, bor: !FREE_MB! MB
     echo  ============================================================================
     echo.
     set "GOON="
@@ -338,13 +315,6 @@ set "LOG=%BACKUP%\_backup.log"
 set "SUMMARY=%BACKUP%\_summary.txt"
 set "REPORT=%BACKUP%\report.html"
 
-echo  ============================================================================
-echo    NUSXALASH BOSHLANDI
-echo  ============================================================================
-echo    Papka: %BACKUP%
-echo  ============================================================================
-echo.
-
 > "%SUMMARY%" echo WinPE Backup Summary
 >> "%SUMMARY%" echo ====================
 >> "%SUMMARY%" echo Manba:     !SRC!
@@ -352,25 +322,23 @@ echo.
 >> "%SUMMARY%" echo Boshlandi: %DATE% %TIME%
 >> "%SUMMARY%" echo.
 
-rem Ekranda faqat fayl nomlari: foiz, "Yangi fayl", hajm va robocopy sarlavhalarisiz
-set "RCF=/E /R:0 /W:0 /MT:16 /XJ /NDL /NC /NS /NP /NJH /NJS /TEE /LOG+:"%LOG%""
-set STEP=0
-set TOTAL=12
+rem robocopy fonda ishlaydi va faqat jurnalga yozadi; ekranda har ~2 soniyada jadval yangilanadi
+set "WORKER=%BACKUP%\_wb_worker.cmd"
+set "RCFILE=%BACKUP%\_wb_rc.txt"
 set "DISK_FULL="
-set "FULL_WARNED="
+set DONE_MB=0
+set CUR_MB=0
+set CUR=0
+set "CNAME=-"
+call :now_sec START_S
 
-call :sect Desktop         "!SRC!\Desktop"
-call :sect Documents       "!SRC!\Documents"
-call :sect Pictures        "!SRC!\Pictures"
-call :sect Videos          "!SRC!\Videos"
-call :sect Music           "!SRC!\Music"
-call :sect Favorites       "!SRC!\Favorites"
-call :sect Links           "!SRC!\Links"
-call :downloads            "!SRC!\Downloads"
-call :roaming              "!SRC!\AppData\Roaming"
-call :local                "!SRC!\AppData\Local"
+for /L %%I in (1,1,%NSEC%) do call :run_sec %%I
 
-call :header "Qo'shimcha: xatcho'plar, Outlook, SSH, RDP, shriftlar" "!SRC!"
+set CUR_MB=0
+set "CNAME=Qo'shimcha ma'lumotlar"
+call :draw
+echo.
+echo    [*] Xatcho'plar, Outlook, SSH, RDP, shriftlar, tizim ma'lumotlari...
 call :bookmark "!SRC!\AppData\Local\Google\Chrome\User Data\Default\Bookmarks" "Chrome_Bookmarks"
 call :bookmark "!SRC!\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks" "Edge_Bookmarks"
 call :bookmark "!SRC!\AppData\Roaming\Mozilla\Firefox\Profiles" "Firefox_Profiles"
@@ -381,24 +349,20 @@ call :ssh_keys
 call :user_fonts
 call :sticky_notes
 call :hosts_file
-call :header "Tizim ma'lumotlari va hisobot" "%BACKUP%\_SystemInfo"
 call :collect_sysinfo
 call :make_html_report
+del "%WORKER%" "%RCFILE%" 2>nul
 
 >> "%SUMMARY%" echo.
 >> "%SUMMARY%" echo Tugadi: %DATE% %TIME%
 
+set "CNAME=TAYYOR"
+call :draw
 title TAYYOR - WinPE Backup
 echo.
-echo  ============================================================================
-echo    TAYYOR!
-echo  ============================================================================
-echo.
-type "%SUMMARY%"
-echo.
-echo  ============================================================================
-echo    Papka:   %BACKUP%
-echo    Hisobot: %REPORT%
+echo    Papka:    %BACKUP%
+echo    Hisobot:  %REPORT%
+echo    Natija:   _summary.txt
 echo  ============================================================================
 echo.
 pause
@@ -468,89 +432,206 @@ rem ===========================================================================
 rem                        NUSXALASH FUNKSIYALARI
 rem ===========================================================================
 
-:header
-set /A STEP+=1
-title [!STEP!/%TOTAL%] %~1 - WinPE Backup
-echo.
-echo  ============================================================================
-echo    [!STEP!/%TOTAL%] %~1
-echo    %~2
-echo  ============================================================================
+:addsec
+rem %1 nom, %2 profildagi papka, %3 zaxiradagi papka, %4 istisnolar o'zgaruvchisi
+set /A NSEC+=1
+set "S_NAME_!NSEC!=%~1"
+set "S_SRC_!NSEC!=!SRC!\%~2"
+set "S_DST_!NSEC!=%~3"
+set "S_X_!NSEC!=!%~4!"
+set "S_MB_!NSEC!=0"
+set "S_ST_!NSEC!=kutilmoqda"
 exit /b 0
 
-:can_copy
-if not exist "%~2" (
-    echo    [i] Papka yo'q - o'tkazib yuborildi.
-    >> "%SUMMARY%" echo [skip] %~1
-    exit /b 1
+:measure_sec
+set "MI=%~1"
+for %%i in (!MI!) do (
+    set "MSRC=!S_SRC_%%i!"
+    set "RCX=!S_X_%%i!"
+)
+if not exist "!MSRC!\" (
+    set "S_ST_!MI!=yo'q"
+    exit /b 0
+)
+call :rc_mb "!MSRC!"
+set "S_MB_!MI!=!RC_MB!"
+set /A TOTAL_MB+=RC_MB
+exit /b 0
+
+:rc_mb
+rem Papka hajmi MB da (robocopy /L, RCX - istisnolar). Til mustaqil:
+rem yakuniy jadvalning 3-qatori - baytlar (Dirs, Files, Bytes), 2-ustun "Copied":
+rem 1-ustun "Total" /XF bilan chiqarilgan fayllarni ham hisoblaydi
+set "RC_MB=0"
+set "RC_B="
+set RC_ROW=0
+for /f "tokens=1* delims=:" %%A in ('robocopy "%~1" NULL /L /E /BYTES /NFL /NDL /NJH /NC /NS /XJ /R:0 /W:0 !RCX! 2^>nul ^| find " : "') do (
+    set /A RC_ROW+=1
+    if !RC_ROW!==3 for /f "tokens=2" %%N in ("%%B") do set "RC_B=%%N"
+)
+if defined RC_B set "RC_MB=!RC_B:~0,-6!"
+if "!RC_MB!"=="" set "RC_MB=0"
+exit /b 0
+
+:free_mb
+rem Fleshkadagi bo'sh joy MB da; wmic bo'lmasa FREE_NOW_MB aniqlanmaydi
+set "FREE_NOW_MB="
+set "FB="
+for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%S") do set "FB=%%x"
+if not defined FB exit /b 0
+set "FREE_NOW_MB=!FB:~0,-6!"
+if "!FREE_NOW_MB!"=="" set "FREE_NOW_MB=0"
+exit /b 0
+
+:now_sec
+set "T=%TIME: =0%"
+set /A "NS=(1%T:~0,2%-100)*3600+(1%T:~3,2%-100)*60+(1%T:~6,2%-100)"
+set "%~1=%NS%"
+exit /b 0
+
+:fmt_hms
+set /A "FH=%~1/3600, FM=(%~1/60)%%60, FS=%~1%%60"
+set "FH=0%FH%"
+set "FM=0%FM%"
+set "FS=0%FS%"
+set "%~2=%FH:~-2%:%FM:~-2%:%FS:~-2%"
+exit /b 0
+
+:run_sec
+set "CUR=%~1"
+for %%i in (!CUR!) do (
+    set "CNAME=!S_NAME_%%i!"
+    set "CSRC=!S_SRC_%%i!"
+    set "CDST=%BACKUP%\!S_DST_%%i!"
+    set "CX=!S_X_%%i!"
+    set "CPLAN=!S_MB_%%i!"
+    set "CST=!S_ST_%%i!"
+)
+if "!CST!"=="yo'q" (
+    >> "%SUMMARY%" echo [skip] !CNAME!
+    exit /b 0
 )
 if defined DISK_FULL (
-    echo    [W] Fleshkada joy yo'q - o'tkazib yuborildi.
-    >> "%SUMMARY%" echo [skip] %~1 - joy yo'q
-    exit /b 1
+    set "S_ST_!CUR!=joy yo'q"
+    >> "%SUMMARY%" echo [skip] !CNAME! - joy yo'q
+    exit /b 0
 )
-exit /b 0
+set "S_ST_!CUR!=nusxalanmoqda..."
+set CUR_MB=0
+call :free_mb
+set "SEC_FREE0=!FREE_NOW_MB!"
 
-:result
-set "RN=%~1"
-set "RRC=%~2"
-call :check_space
-if %RRC% GEQ 8 (
-    echo    [W] %RN%: xatolar bor, kod %RRC% - _backup.log faylini ko'ring.
-    >> "%SUMMARY%" echo [xato] %RN% - kod %RRC%
+del "%RCFILE%" 2>nul
+> "%WORKER%" echo @echo off
+>> "%WORKER%" echo robocopy "!CSRC!" "!CDST!" /E /R:0 /W:0 /MT:16 /XJ /NFL /NDL /NJH /NJS /NP /LOG+:"%LOG%" !CX! ^>nul 2^>^&1
+>> "%WORKER%" echo ^> "%RCFILE%" echo %%ERRORLEVEL%%
+start "" /b cmd /c call "%WORKER%"
+
+:run_wait
+call :measure_cur
+call :draw
+if exist "%RCFILE%" goto :run_done
+ping -n 3 127.0.0.1 >nul 2>&1
+goto :run_wait
+
+:run_done
+set "RRC="
+set /p RRC=<"%RCFILE%"
+if not defined RRC (
+    ping -n 2 127.0.0.1 >nul 2>&1
+    set /p RRC=<"%RCFILE%"
+)
+if not defined RRC set RRC=0
+rem Tugagan papka hajmini aniq o'lchaymiz
+set "RCX="
+set "RC_MB=0"
+if exist "!CDST!\" call :rc_mb "!CDST!"
+set /A DONE_MB+=RC_MB
+set CUR_MB=0
+if !RRC! GEQ 8 (
+    set "S_ST_!CUR!=xato, kod !RRC!"
+    >> "%SUMMARY%" echo [xato] !CNAME! - kod !RRC!
 ) else (
-    echo    [OK] %RN% nusxalandi.
-    >> "%SUMMARY%" echo [ok]   %RN%
+    set "S_ST_!CUR!=tayyor"
+    >> "%SUMMARY%" echo [ok]   !CNAME!
 )
-if defined DISK_FULL if not defined FULL_WARNED (
-    set FULL_WARNED=1
-    echo.
-    echo  ============================================================================
-    echo    [W] FLESHKADA JOY TUGADI
-    echo        Qolgan papkalar o'tkazib yuboriladi.
-    echo  ============================================================================
+rem 100 MB dan kam qolsa - qolgan papkalar o'tkazib yuboriladi
+call :free_mb
+if defined FREE_NOW_MB if !FREE_NOW_MB! LSS 100 set "DISK_FULL=1"
+exit /b 0
+
+:measure_cur
+rem wmic bo'lsa - tez usul: bo'sh joy qancha kamaygani; bo'lmasa - robocopy /L bilan
+call :free_mb
+if defined FREE_NOW_MB if defined SEC_FREE0 (
+    set /A CUR_MB=SEC_FREE0-FREE_NOW_MB
+    if !CUR_MB! LSS 0 set CUR_MB=0
+    if !CUR_MB! GTR !CPLAN! set CUR_MB=!CPLAN!
+    exit /b 0
 )
+set "RCX="
+set "RC_MB=0"
+if exist "!CDST!\" call :rc_mb "!CDST!"
+set "CUR_MB=!RC_MB!"
 exit /b 0
 
-:check_space
-rem 100 MB dan kam qolsa (9 raqamdan qisqa son) - fleshka to'lgan deb hisoblaymiz
-set "CS_FREE="
-for /f "usebackq tokens=2 delims==" %%S in (`wmic logicaldisk where "DeviceID='!DST!'" get FreeSpace /value 2^>nul ^| find "="`) do for /f "delims=" %%x in ("%%S") do set "CS_FREE=%%x"
-if not defined CS_FREE exit /b 0
-if "!CS_FREE:~8,1!"=="" set "DISK_FULL=1"
+:draw
+call :now_sec NOW_S
+set /A EL=NOW_S-START_S
+if !EL! LSS 0 set /A EL+=86400
+set /A COPIED=DONE_MB+CUR_MB
+set PCT=0
+if !TOTAL_MB! GTR 0 set /A PCT=COPIED*100/TOTAL_MB
+if !PCT! GTR 100 set PCT=100
+set "SPD=-"
+set "ETA=hisoblanmoqda..."
+if !EL! GTR 0 if !COPIED! GTR 0 (
+    set /A SP10=COPIED*10/EL
+    set /A SPI=SP10/10, SPF=SP10%%10
+    set "SPD=!SPI!.!SPF! MB/s"
+    if !SP10! GTR 0 (
+        set /A RMB=TOTAL_MB-COPIED
+        if !RMB! LSS 0 set RMB=0
+        set /A ETA_S=RMB*10/SP10
+        call :fmt_hms !ETA_S! ETA
+    )
+)
+call :fmt_hms !EL! ELT
+set /A FILLED=PCT*40/100
+set "BAR="
+for /L %%b in (1,1,40) do if %%b LEQ !FILLED! (set "BAR=!BAR!#") else (set "BAR=!BAR!.")
+title !PCT!%% - !CNAME! - WinPE Backup
+cls
+echo.
+echo  ============================================================================
+echo    ZAXIRALASH JARAYONI  -  !UNAME!
+echo  ============================================================================
+echo.
+echo    Hozir:          [!CUR!/!NSEC!] !CNAME!
+echo    Nusxalandi:     !COPIED! MB / !TOTAL_MB! MB   - !PCT!%%
+echo    [!BAR!]
+echo.
+echo    Tezlik:         !SPD!
+echo    O'tgan vaqt:    !ELT!
+echo    Qolgan vaqt:    !ETA!
+if defined FREE_NOW_MB echo    Fleshkada joy:  !FREE_NOW_MB! MB
+echo.
+echo    #   Papka                  Hajm, MB   Holat
+echo    --  ---------------------  ---------  ----------------
+for /L %%I in (1,1,!NSEC!) do call :draw_row %%I
+echo  ============================================================================
 exit /b 0
 
-:sect
-set "SNAME=%~1"
-set "SPATH=%~2"
-call :header "%SNAME%" "%SPATH%"
-call :can_copy "%SNAME%" "%SPATH%" || exit /b 0
-robocopy "%SPATH%" "%BACKUP%\%SNAME%" %RCF% /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "$Recycle.Bin" "System Volume Information" "node_modules" "__pycache__" ".venv" "venv" "pip" "pip-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.temp" "*.log1" "*.log2" "*.etl" "*.lock"
-call :result "%SNAME%" %ERRORLEVEL%
-exit /b 0
-
-:downloads
-set "SPATH=%~1"
-call :header "Downloads - o'rnatuvchi fayllarsiz" "%SPATH%"
-call :can_copy "Downloads" "%SPATH%" || exit /b 0
-robocopy "%SPATH%" "%BACKUP%\Downloads" %RCF% /XD "Cache" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.exe" "*.msi" "*.msix" "*.msixbundle" "*.appx" "*.appxbundle" "*.iso" "*.img" "*.vhd" "*.vhdx" "*.dmg" "*.pkg" "*.deb" "*.rpm"
-call :result "Downloads" %ERRORLEVEL%
-exit /b 0
-
-:roaming
-set "SPATH=%~1"
-call :header "AppData\Roaming - dastur sozlamalari" "%SPATH%"
-call :can_copy "AppData\Roaming" "%SPATH%" || exit /b 0
-robocopy "%SPATH%" "%BACKUP%\AppData_Roaming" %RCF% /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
-call :result "AppData\Roaming" %ERRORLEVEL%
-exit /b 0
-
-:local
-set "SPATH=%~1"
-call :header "AppData\Local - dastur ma'lumotlari" "%SPATH%"
-call :can_copy "AppData\Local" "%SPATH%" || exit /b 0
-robocopy "%SPATH%" "%BACKUP%\AppData_Local" %RCF% /XD "Cache" "Cache2" "Code Cache" "GPUCache" "ShaderCache" "DawnCache" "Service Worker" "IndexedDB" "Local Storage" "Session Storage" "blob_storage" "Crashpad" "CrashDumps" "logs" "Logs" "Temp" "tmp" "D3DSCache" "Packages" "PackageStaging" "SquirrelTemp" "WebCache" "INetCache" "INetCookies" "History" "NVIDIA" "NVIDIA Corporation" "AMD" "Intel" "ConnectedDevicesPlatform" "pnpm-cache" "yarn-cache" /XF "Thumbs.db" "desktop.ini" "*.tmp" "*.log1" "*.log2" "*.etl" "*.lock"
-call :result "AppData\Local" %ERRORLEVEL%
+:draw_row
+for %%i in (%~1) do (
+    set "RN=!S_NAME_%%i!"
+    set "RM=!S_MB_%%i!"
+    set "RS=!S_ST_%%i!"
+)
+set "RN=!RN!                       "
+set "RM=         !RM!"
+set "RI=  %~1"
+echo    !RI:~-2!  !RN:~0,21!  !RM:~-9!  !RS!
 exit /b 0
 
 :bookmark
